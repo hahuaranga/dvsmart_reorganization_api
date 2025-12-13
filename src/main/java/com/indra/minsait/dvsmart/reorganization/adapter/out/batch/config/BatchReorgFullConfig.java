@@ -1,3 +1,16 @@
+/*
+ * /////////////////////////////////////////////////////////////////////////////
+ *
+ * Copyright (c) 2025 Indra Sistemas, S.A. All Rights Reserved.
+ * http://www.indracompany.com/
+ *
+ * The contents of this file are owned by Indra Sistemas, S.A. copyright holder.
+ * This file can only be copied, distributed and used all or in part with the
+ * written permission of Indra Sistemas, S.A, or in accordance with the terms and
+ * conditions laid down in the agreement / contract under which supplied.
+ *
+ * /////////////////////////////////////////////////////////////////////////////
+ */
 package com.indra.minsait.dvsmart.reorganization.adapter.out.batch.config;
 
 import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.reader.MongoIndexedFileItemReader;
@@ -26,7 +39,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
-import org.springframework.transaction.PlatformTransactionManager;
 import java.util.Arrays;
 import java.util.concurrent.Future;
 
@@ -42,7 +54,6 @@ import java.util.concurrent.Future;
 public class BatchReorgFullConfig {
 
     private final JobRepository jobRepository;
-    private final PlatformTransactionManager transactionManager;
     private final MongoIndexedFileItemReader mongoReader;
     private final SftpMoveAndAuditItemWriter sftpWriter;
     private final FileReorganizationService reorganizationService;
@@ -140,8 +151,8 @@ public class BatchReorgFullConfig {
      */
     @Bean
     AsyncItemProcessor<ArchivoIndexDocument, ArchivoLegacy> asyncProcessor() {
-        AsyncItemProcessor<ArchivoIndexDocument, ArchivoLegacy> asyncProcessor = new AsyncItemProcessor<>();
-        asyncProcessor.setDelegate(compositeProcessor());
+        AsyncItemProcessor<ArchivoIndexDocument, ArchivoLegacy> asyncProcessor = 
+            new AsyncItemProcessor<ArchivoIndexDocument, ArchivoLegacy>(compositeProcessor());
         asyncProcessor.setTaskExecutor(batchTaskExecutor());
         return asyncProcessor;
     }
@@ -151,8 +162,7 @@ public class BatchReorgFullConfig {
      */
     @Bean
     AsyncItemWriter<ArchivoLegacy> asyncWriter() {
-        AsyncItemWriter<ArchivoLegacy> asyncWriter = new AsyncItemWriter<>();
-        asyncWriter.setDelegate(sftpWriter);
+        AsyncItemWriter<ArchivoLegacy> asyncWriter = new AsyncItemWriter<>(sftpWriter);
         return asyncWriter;
     }
 
@@ -162,7 +172,7 @@ public class BatchReorgFullConfig {
     @Bean
     Step reorganizeStep() {
         return new StepBuilder("reorganizeStep", jobRepository)
-                .<ArchivoIndexDocument, Future<ArchivoLegacy>>chunk(batchProps.getChunkSize(), transactionManager)
+                .<ArchivoIndexDocument, Future<ArchivoLegacy>>chunk(batchProps.getChunkSize())
                 .reader(archivoIndexReader())
                 .processor(asyncProcessor())
                 .writer(asyncWriter())

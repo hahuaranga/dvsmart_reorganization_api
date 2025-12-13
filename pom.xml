@@ -20,7 +20,6 @@
 		<license.maven.plugin.version>5.0.0</license.maven.plugin.version>
 		<maven.build.timestamp.format>yyyy</maven.build.timestamp.format>
 
-		<!-- Spring versions (compatibles con Spring Boot 4.0.0) -->
 		<spring-batch.version>6.0.0</spring-batch.version>
 		<spring-integration.version>7.0.0</spring-integration.version>
 
@@ -56,14 +55,12 @@
 		<dependency>
 			<groupId>org.springframework.integration</groupId>
 			<artifactId>spring-integration-core</artifactId>
-			<version>${spring-integration.version}</version>
 		</dependency>
 
 		<!-- Spring Integration SFTP (SSHJ) -->
 		<dependency>
 			<groupId>org.springframework.integration</groupId>
 			<artifactId>spring-integration-sftp</artifactId>
-			<version>${spring-integration.version}</version>
 		</dependency>
 
 		<dependency>
@@ -82,7 +79,6 @@
 		<dependency>
 			<groupId>org.projectlombok</groupId>
 			<artifactId>lombok</artifactId>
-			<version>${lombok.version}</version>
 			<scope>provided</scope>
 		</dependency>
 
@@ -116,7 +112,6 @@
 		<dependency>
 			<groupId>org.springframework.integration</groupId>
 			<artifactId>spring-integration-test</artifactId>
-			<version>${spring-integration.version}</version>
 			<scope>test</scope>
 		</dependency>
 	</dependencies>
@@ -129,7 +124,6 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-compiler-plugin</artifactId>
-				<version>3.11.0</version>
 				<configuration>
 					<source>${java.version}</source>
 					<target>${java.version}</target>
@@ -177,8 +171,7 @@
 				<version>${license.maven.plugin.version}</version>
 				<configuration>
 					<!-- Ruta del banner -->
-					<header>
-						${project.basedir}/src/main/resources/license-header.txt</header>
+					<header>src/main/resources/license-header.txt</header>
 
 					<!-- Aplicar solo a archivos donde corresponde -->
 					<includes>
@@ -201,12 +194,18 @@
 					<mapping>
 						<java>SLASHSTAR_STYLE</java>
 					</mapping>
+
+					<!-- Configuraciones adicionales importantes -->
+					<strictCheck>true</strictCheck>
+					<useDefaultExcludes>true</useDefaultExcludes>
 				</configuration>
 
 				<executions>
-					<!-- Ejecuta el format al construir -->
+					<!-- Ejecuta el format en la fase process-sources (antes de
+					compile) -->
 					<execution>
 						<id>apply-license-headers</id>
+						<phase>process-sources</phase>
 						<goals>
 							<goal>format</goal>
 						</goals>
@@ -218,7 +217,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-surefire-plugin</artifactId>
-				<version>3.0.0</version>
+				<!--				<version>3.0.0</version>-->
 				<configuration>
 					<includes>
 						<include>**/*Test.java</include>
@@ -231,7 +230,7 @@
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>
 				<artifactId>maven-resources-plugin</artifactId>
-				<version>3.3.1</version>
+				<!--				<version>3.3.1</version>-->
 				<configuration>
 					<encoding>${project.build.sourceEncoding}</encoding>
 				</configuration>
