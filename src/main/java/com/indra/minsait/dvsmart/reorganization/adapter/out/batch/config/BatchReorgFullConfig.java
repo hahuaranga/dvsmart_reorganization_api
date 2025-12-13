@@ -1,0 +1,183 @@
+package com.indra.minsait.dvsmart.reorganization.adapter.out.batch.config;
+
+import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.reader.MongoIndexedFileItemReader;
+import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.writter.SftpMoveAndAuditItemWriter;
+import com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity.ArchivoIndexDocument;
+import com.indra.minsait.dvsmart.reorganization.domain.model.ArchivoLegacy;
+import com.indra.minsait.dvsmart.reorganization.domain.service.FileReorganizationService;
+import com.indra.minsait.dvsmart.reorganization.infrastructure.config.BatchConfigProperties;
+import com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.core.configuration.JobRegistry;
+import org.springframework.batch.core.configuration.support.MapJobRegistry;
+import org.springframework.batch.core.job.Job;
+import org.springframework.batch.core.job.builder.JobBuilder;
+import org.springframework.batch.core.job.parameters.RunIdIncrementer;
+import org.springframework.batch.core.repository.JobRepository;
+import org.springframework.batch.core.step.Step;
+import org.springframework.batch.core.step.builder.StepBuilder;
+import org.springframework.batch.infrastructure.item.ItemProcessor;
+import org.springframework.batch.infrastructure.item.data.MongoCursorItemReader;
+import org.springframework.batch.infrastructure.item.support.CompositeItemProcessor;
+import org.springframework.batch.integration.async.AsyncItemProcessor;
+import org.springframework.batch.integration.async.AsyncItemWriter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import org.springframework.transaction.PlatformTransactionManager;
+import java.util.Arrays;
+import java.util.concurrent.Future;
+
+/**
+ * Author: hahuaranga@indracompany.com
+ * Created on: 12-12-2025 at 13:23:54
+ * File: BatchReorgFullConfig.java
+ */
+
+@Slf4j
+@Configuration
+@RequiredArgsConstructor
+public class BatchReorgFullConfig {
+
+    private final JobRepository jobRepository;
+    private final PlatformTransactionManager transactionManager;
+    private final MongoIndexedFileItemReader mongoReader;
+    private final SftpMoveAndAuditItemWriter sftpWriter;
+    private final FileReorganizationService reorganizationService;
+    private final SftpConfigProperties sftpProps;
+    private final BatchConfigProperties batchProps;
+
+    // ========================================================================
+    // NUEVOS BEANS AGREGADOS PARA JobOperator
+    // ========================================================================
+    
+    /**
+     * JobRegistry para que JobOperator pueda encontrar jobs por nombre.
+     * Sin este bean, JobOperator lanzará NoSuchJobException.
+     */
+    @Bean
+    JobRegistry jobRegistry() {
+        return new MapJobRegistry();
+    }
+
+    // ========================================================================
+    // BEANS EXISTENTES (SIN CAMBIOS)
+    // ========================================================================
+
+    @Bean(name = "batchTaskExecutor")
+    TaskExecutor batchTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(batchProps.getThreadPoolSize());
+        executor.setMaxPoolSize(batchProps.getThreadPoolSize());
+        executor.setQueueCapacity(batchProps.getQueueCapacity());
+        executor.setThreadNamePrefix("batch-async-");
+        executor.setWaitForTasksToCompleteOnShutdown(true);
+        executor.setAwaitTerminationSeconds(60);
+        executor.initialize();
+        return executor;
+    }
+
+    /**
+     * Reader con cursor streaming
+     * Usa MongoCursorItemReader para millones de registros
+     */
+    @Bean
+    MongoCursorItemReader<ArchivoIndexDocument> archivoIndexReader() {
+        return mongoReader.createReader();
+    }
+
+    /**
+     * Processor 1: Convierte Document MongoDB → ArchivoLegacy
+     */
+    @Bean
+    ItemProcessor<ArchivoIndexDocument, ArchivoLegacy> documentToLegacyProcessor() {
+        return doc -> {
+            if (doc == null) {
+                return null;
+            }
+            return ArchivoLegacy.builder()
+                    .idUnico(doc.getIdUnico())
+                    .rutaOrigen(doc.getRutaOrigen())
+                    .nombre(doc.getNombre())
+                    .mtime(doc.getMtime())
+                    .build();
+        };
+    }
+
+    /**
+     * Processor 2: Calcula hash partition (SHA-256)
+     */
+    @Bean
+    ItemProcessor<ArchivoLegacy, ArchivoLegacy> hashPartitionProcessor() {
+        return archivo -> {
+            if (archivo == null) {
+                return null;
+            }
+            String destPath = reorganizationService.calculateDestinationPath(
+                archivo, sftpProps.getDest().getBaseDir());
+            log.trace("Calculated destination: {} -> {}", archivo.getRutaOrigen(), destPath);
+            return archivo;
+        };
+    }
+
+    /**
+     * Composite Processor: Combina Document→Legacy + Hash
+     */
+    @Bean
+    CompositeItemProcessor<ArchivoIndexDocument, ArchivoLegacy> compositeProcessor() {
+        CompositeItemProcessor<ArchivoIndexDocument, ArchivoLegacy> processor = new CompositeItemProcessor<>();
+        processor.setDelegates(Arrays.asList(
+            documentToLegacyProcessor(),
+            hashPartitionProcessor()
+        ));
+        return processor;
+    }
+
+    /**
+     * Async Processor para procesamiento paralelo
+     */
+    @Bean
+    AsyncItemProcessor<ArchivoIndexDocument, ArchivoLegacy> asyncProcessor() {
+        AsyncItemProcessor<ArchivoIndexDocument, ArchivoLegacy> asyncProcessor = new AsyncItemProcessor<>();
+        asyncProcessor.setDelegate(compositeProcessor());
+        asyncProcessor.setTaskExecutor(batchTaskExecutor());
+        return asyncProcessor;
+    }
+
+    /**
+     * Async Writer para escritura paralela
+     */
+    @Bean
+    AsyncItemWriter<ArchivoLegacy> asyncWriter() {
+        AsyncItemWriter<ArchivoLegacy> asyncWriter = new AsyncItemWriter<>();
+        asyncWriter.setDelegate(sftpWriter);
+        return asyncWriter;
+    }
+
+    /**
+     * Step principal con chunk-oriented processing
+     */
+    @Bean
+    Step reorganizeStep() {
+        return new StepBuilder("reorganizeStep", jobRepository)
+                .<ArchivoIndexDocument, Future<ArchivoLegacy>>chunk(batchProps.getChunkSize(), transactionManager)
+                .reader(archivoIndexReader())
+                .processor(asyncProcessor())
+                .writer(asyncWriter())
+                .build();
+    }
+
+    /**
+     * Job completo de reorganización.
+     * IMPORTANTE: El nombre "BATCH-REORG-FULL" debe coincidir con el usado en JobOperator.start()
+     */
+    @Bean(name = "batchReorgFullJob")
+    Job batchReorgFullJob() {
+        return new JobBuilder("BATCH-REORG-FULL", jobRepository)
+                .incrementer(new RunIdIncrementer())
+                .start(reorganizeStep())
+                .build();
+    }
+}

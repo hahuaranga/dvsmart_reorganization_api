@@ -1,0 +1,134 @@
+{
+  "groups": [
+    {
+      "name": "batch",
+      "type": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.BatchConfigProperties",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.BatchConfigProperties"
+    },
+    {
+      "name": "sftp",
+      "type": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties"
+    },
+    {
+      "name": "sftp.dest",
+      "type": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Destination",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties",
+      "sourceMethod": "public com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties.Destination getDest() "
+    },
+    {
+      "name": "sftp.dest.pool",
+      "type": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Pool",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Destination",
+      "sourceMethod": "public com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties.Pool getPool() "
+    },
+    {
+      "name": "sftp.origin",
+      "type": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Origin",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties",
+      "sourceMethod": "public com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties.Origin getOrigin() "
+    },
+    {
+      "name": "sftp.origin.pool",
+      "type": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Pool",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Origin",
+      "sourceMethod": "public com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties.Pool getPool() "
+    }
+  ],
+  "properties": [
+    {
+      "name": "batch.chunk-size",
+      "type": "java.lang.Integer",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.BatchConfigProperties"
+    },
+    {
+      "name": "batch.concurrency-limit",
+      "type": "java.lang.Integer",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.BatchConfigProperties"
+    },
+    {
+      "name": "batch.queue-capacity",
+      "type": "java.lang.Integer",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.BatchConfigProperties"
+    },
+    {
+      "name": "batch.thread-pool-size",
+      "type": "java.lang.Integer",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.BatchConfigProperties"
+    },
+    {
+      "name": "sftp.dest.base-dir",
+      "type": "java.lang.String",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Destination"
+    },
+    {
+      "name": "sftp.dest.host",
+      "type": "java.lang.String",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Destination"
+    },
+    {
+      "name": "sftp.dest.password",
+      "type": "java.lang.String",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Destination"
+    },
+    {
+      "name": "sftp.dest.pool.size",
+      "type": "java.lang.Integer",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Pool"
+    },
+    {
+      "name": "sftp.dest.port",
+      "type": "java.lang.Integer",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Destination"
+    },
+    {
+      "name": "sftp.dest.timeout",
+      "type": "java.lang.Integer",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Destination"
+    },
+    {
+      "name": "sftp.dest.user",
+      "type": "java.lang.String",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Destination"
+    },
+    {
+      "name": "sftp.origin.base-dir",
+      "type": "java.lang.String",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Origin"
+    },
+    {
+      "name": "sftp.origin.host",
+      "type": "java.lang.String",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Origin"
+    },
+    {
+      "name": "sftp.origin.password",
+      "type": "java.lang.String",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Origin"
+    },
+    {
+      "name": "sftp.origin.pool.size",
+      "type": "java.lang.Integer",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Pool"
+    },
+    {
+      "name": "sftp.origin.port",
+      "type": "java.lang.Integer",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Origin"
+    },
+    {
+      "name": "sftp.origin.timeout",
+      "type": "java.lang.Integer",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Origin"
+    },
+    {
+      "name": "sftp.origin.user",
+      "type": "java.lang.String",
+      "sourceType": "com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties$Origin"
+    }
+  ],
+  "hints": [],
+  "ignored": {
+    "properties": []
+  }
+}

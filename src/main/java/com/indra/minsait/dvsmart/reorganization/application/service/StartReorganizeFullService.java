@@ -1,0 +1,50 @@
+package com.indra.minsait.dvsmart.reorganization.application.service;
+
+import com.indra.minsait.dvsmart.reorganization.application.port.in.StartReorganizeFullUseCase;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.core.launch.JobInstanceAlreadyExistsException;
+import org.springframework.batch.core.launch.JobOperator;
+import org.springframework.batch.core.launch.NoSuchJobException;
+import org.springframework.stereotype.Service;
+import java.util.Properties;
+
+/**
+ * Author: hahuaranga@indracompany.com
+ * Created on: 12-12-2025 at 12:54:15
+ * File: StartReorganizeFullService.java
+ */
+
+@Slf4j
+@Service
+@RequiredArgsConstructor
+public class StartReorganizeFullService implements StartReorganizeFullUseCase {
+
+    private final JobOperator jobOperator;
+
+    @Override
+    public Long execute() {
+        try {
+            // Crear Properties con los parámetros del job
+            Properties jobProperties = new Properties();
+            jobProperties.setProperty("timestamp", String.valueOf(System.currentTimeMillis()));
+            
+            // Lanzar job usando el nombre del job (definido en BatchReorgFullConfig)
+            Long jobExecutionId = jobOperator.start("BATCH-REORG-FULL", jobProperties);
+            
+            log.info("Job launched successfully. JobExecutionId: {}", jobExecutionId);
+            
+            return jobExecutionId;
+            
+        } catch (NoSuchJobException e) {
+            log.error("Job not found in registry: BATCH-REORG-FULL", e);
+            throw new RuntimeException("Job 'BATCH-REORG-FULL' not registered in JobRegistry", e);
+        } catch (JobInstanceAlreadyExistsException e) {
+            log.warn("Job instance already exists with these parameters", e);
+            throw new RuntimeException("Duplicate job instance. Job may already be running.", e);
+        } catch (Exception e) {
+            log.error("Failed to launch batch job", e);
+            throw new RuntimeException("Failed to start reorganization job", e);
+        }
+    }
+}
