@@ -38,18 +38,18 @@ Sistema de reorganización masiva de archivos desde servidores SFTP origen a des
 │  │ (MongoDB)│  │ (Hash)   │  │ (SFTP)   │     │
 │  └──────────┘  └──────────┘  └──────────┘     │
 └─────────────────────────────────────────────────┘
-         │                              │
-┌────────▼────────┐            ┌───────▼────────┐
-│   MongoDB       │            │  SFTP Servers  │
-│  - archivo_index│            │  - Origin      │
-│  - processed_   │            │  - Destination │
-│    files        │            └────────────────┘
+         │                              		│
+┌────────▼────────┐            				┌───────▼────────┐
+│   MongoDB       │            				│  SFTP Servers  │
+│  - disorganized-files-index│            │  - Origin      │
+│  - processed_   │            				│  - Destination │
+│    files        │            				└────────────────┘
 └─────────────────┘
 ```
 
 ### Flujo de Procesamiento
 
-1. **Lectura**: Cursor streaming de MongoDB (`archivo_index`)
+1. **Lectura**: Cursor streaming de MongoDB (`disorganized-files-index`)
 2. **Procesamiento Asíncrono**:
    - Conversión de documento → modelo de dominio
    - Cálculo de hash SHA-256
@@ -208,7 +208,7 @@ export SFTP_DEST_BASE_DIR=/data/production/reorganized
 
 ### Colecciones
 
-#### 1. `archivo_index` (Índice de Archivos Origen)
+#### 1. `disorganized-files-index` (Índice de Archivos Origen)
 
 Contiene el inventario de archivos a reorganizar.
 
@@ -238,13 +238,13 @@ Contiene el inventario de archivos a reorganizar.
 
 ```javascript
 // Índice único en idUnico
-db.archivo_index.createIndex(
+db.disorganized-files-index.createIndex(
     { "idUnico": 1 }, 
     { unique: true, name: "idx_idUnico_unique" }
 )
 
 // Índice por defecto en _id (auto-creado)
-db.archivo_index.createIndex(
+db.disorganized-files-index.createIndex(
     { "_id": 1 }
 )
 ```
@@ -254,9 +254,9 @@ db.archivo_index.createIndex(
 ```javascript
 use dvsmart_reorganization_dev
 
-db.createCollection("archivo_index")
+db.createCollection("disorganized-files-index")
 
-db.archivo_index.createIndex(
+db.disorganized-files-index.createIndex(
     { "idUnico": 1 }, 
     { unique: true, name: "idx_idUnico_unique" }
 )
@@ -265,7 +265,7 @@ db.archivo_index.createIndex(
 **Ejemplo de Inserción:**
 
 ```javascript
-db.archivo_index.insertMany([
+db.disorganized-files-index.insertMany([
     {
         idUnico: "file1-unique-id",
         rutaOrigen: "/home/testuser/upload/origin/dir1/file1.txt",
@@ -313,7 +313,7 @@ Registra el resultado del procesamiento de cada archivo.
 | Campo | Tipo | Obligatorio | Descripción |
 |-------|------|-------------|-------------|
 | `_id` | ObjectId | Sí | ID MongoDB (auto-generado) |
-| `idUnico` | String | Sí | Identificador único (mismo que `archivo_index`) |
+| `idUnico` | String | Sí | Identificador único (mismo que `disorganized-files-index`) |
 | `rutaOrigen` | String | Sí | Path original en SFTP origen |
 | `rutaDestino` | String | Sí | Path calculado en SFTP destino |
 | `nombre` | String | Sí | Nombre del archivo |
@@ -414,15 +414,15 @@ echo "Inicializando base de datos MongoDB..."
 mongosh mongodb://localhost:27017/dvsmart_reorganization_dev <<EOF
 
 // Eliminar colecciones existentes (opcional)
-db.archivo_index.drop();
+db.disorganized-files-index.drop();
 db.processed_files.drop();
 
-// Crear colección archivo_index
-db.createCollection("archivo_index");
-db.archivo_index.createIndex({ "idUnico": 1 }, { unique: true });
+// Crear colección disorganized-files-index
+db.createCollection("disorganized-files-index");
+db.disorganized-files-index.createIndex({ "idUnico": 1 }, { unique: true });
 
 // Insertar archivos de prueba
-db.archivo_index.insertMany([
+db.disorganized-files-index.insertMany([
     {
         idUnico: "file1-unique-id",
         rutaOrigen: "/home/testuser/upload/origin/dir1/file1.txt",
@@ -462,7 +462,7 @@ db.processed_files.createIndex({ "status": 1, "processedAt": -1 });
 db.processed_files.createIndex({ "processedAt": -1 });
 
 print("✓ Base de datos inicializada correctamente");
-print("✓ Archivos insertados: " + db.archivo_index.countDocuments());
+print("✓ Archivos insertados: " + db.disorganized-files-index.countDocuments());
 
 EOF
 
@@ -503,7 +503,7 @@ db.processed_files.find({
 
 #### Archivos pendientes de procesar
 ```javascript
-db.archivo_index.aggregate([
+db.disorganized-files-index.aggregate([
     {
         $lookup: {
             from: "processed_files",

@@ -26,7 +26,7 @@ import java.time.Instant;
  */
 
 @Data
-@Document(collection = "archivo_index")
+@Document(collection = "disorganized-files-index")
 public class ArchivoIndexDocument {
     
     @Id
@@ -37,5 +37,16 @@ public class ArchivoIndexDocument {
     
     private String rutaOrigen;
     private String nombre;
+    
+    // Mantiene la fecha de modificación del archivo
     private Instant mtime;
+    
+    // Nuevo campo: tamaño del archivo (corresponde a NumberLong en MongoDB)
+    private Long tamanio;
+    
+    // Nuevo campo: extensión del archivo
+    private String extension;
+    
+    // Nuevo campo: fecha en que el documento fue indexado (corresponde a Date en MongoDB)
+    private Instant indexadoEn;    
 }

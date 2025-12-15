@@ -14,6 +14,8 @@
 package com.indra.minsait.dvsmart.reorganization.adapter.out.batch.reader;
 
 import com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity.ArchivoIndexDocument;
+import com.indra.minsait.dvsmart.reorganization.infrastructure.config.MongoConfigProperties;
+
 import lombok.RequiredArgsConstructor;
 import org.bson.Document;
 import org.springframework.batch.infrastructure.item.data.MongoCursorItemReader;
@@ -39,6 +41,8 @@ import java.util.Map;
 public class MongoIndexedFileItemReader {
 
     private final MongoTemplate mongoTemplate;
+    
+    private final MongoConfigProperties properties; 
 
     /**
      * Crea un MongoCursorItemReader para streaming eficiente
@@ -59,7 +63,7 @@ public class MongoIndexedFileItemReader {
                 .jsonQuery(query.toJson())
                 .targetType(ArchivoIndexDocument.class)
                 .sorts(sorts)
-                .collection("archivo_index")
+                .collection(properties.getDisorganizedFilesIndex())
                 .batchSize(100) // Tamaño del batch interno del cursor
                 .saveState(true) // Permite restart del job
                 .build();
