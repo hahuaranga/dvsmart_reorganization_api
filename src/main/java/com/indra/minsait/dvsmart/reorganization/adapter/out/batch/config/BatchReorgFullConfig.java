@@ -15,7 +15,7 @@ package com.indra.minsait.dvsmart.reorganization.adapter.out.batch.config;
 
 import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.reader.MongoIndexedFileItemReader;
 import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.writter.SftpMoveAndAuditItemWriter;
-import com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity.ArchivoIndexDocument;
+import com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity.DisorganizedFilesIndexDocument;
 import com.indra.minsait.dvsmart.reorganization.domain.model.ArchivoLegacy;
 import com.indra.minsait.dvsmart.reorganization.domain.service.FileReorganizationService;
 import com.indra.minsait.dvsmart.reorganization.infrastructure.config.BatchConfigProperties;
@@ -95,7 +95,7 @@ public class BatchReorgFullConfig {
      * Usa MongoCursorItemReader para millones de registros
      */
     @Bean
-    MongoCursorItemReader<ArchivoIndexDocument> archivoIndexReader() {
+    MongoCursorItemReader<DisorganizedFilesIndexDocument> archivoIndexReader() {
         return mongoReader.createReader();
     }
 
@@ -103,7 +103,7 @@ public class BatchReorgFullConfig {
      * Processor 1: Convierte Document MongoDB → ArchivoLegacy
      */
     @Bean
-    ItemProcessor<ArchivoIndexDocument, ArchivoLegacy> documentToLegacyProcessor() {
+    ItemProcessor<DisorganizedFilesIndexDocument, ArchivoLegacy> documentToLegacyProcessor() {
         return doc -> {
             if (doc == null) {
                 return null;
@@ -137,8 +137,8 @@ public class BatchReorgFullConfig {
      * Composite Processor: Combina Document→Legacy + Hash
      */
     @Bean
-    CompositeItemProcessor<ArchivoIndexDocument, ArchivoLegacy> compositeProcessor() {
-        CompositeItemProcessor<ArchivoIndexDocument, ArchivoLegacy> processor = new CompositeItemProcessor<>();
+    CompositeItemProcessor<DisorganizedFilesIndexDocument, ArchivoLegacy> compositeProcessor() {
+        CompositeItemProcessor<DisorganizedFilesIndexDocument, ArchivoLegacy> processor = new CompositeItemProcessor<>();
         processor.setDelegates(Arrays.asList(
             documentToLegacyProcessor(),
             hashPartitionProcessor()
@@ -150,9 +150,9 @@ public class BatchReorgFullConfig {
      * Async Processor para procesamiento paralelo
      */
     @Bean
-    AsyncItemProcessor<ArchivoIndexDocument, ArchivoLegacy> asyncProcessor() {
-        AsyncItemProcessor<ArchivoIndexDocument, ArchivoLegacy> asyncProcessor = 
-            new AsyncItemProcessor<ArchivoIndexDocument, ArchivoLegacy>(compositeProcessor());
+    AsyncItemProcessor<DisorganizedFilesIndexDocument, ArchivoLegacy> asyncProcessor() {
+        AsyncItemProcessor<DisorganizedFilesIndexDocument, ArchivoLegacy> asyncProcessor = 
+            new AsyncItemProcessor<DisorganizedFilesIndexDocument, ArchivoLegacy>(compositeProcessor());
         asyncProcessor.setTaskExecutor(batchTaskExecutor());
         return asyncProcessor;
     }
@@ -172,7 +172,7 @@ public class BatchReorgFullConfig {
     @Bean
     Step reorganizeStep() {
         return new StepBuilder("reorganizeStep", jobRepository)
-                .<ArchivoIndexDocument, Future<ArchivoLegacy>>chunk(batchProps.getChunkSize())
+                .<DisorganizedFilesIndexDocument, Future<ArchivoLegacy>>chunk(batchProps.getChunkSize())
                 .reader(archivoIndexReader())
                 .processor(asyncProcessor())
                 .writer(asyncWriter())

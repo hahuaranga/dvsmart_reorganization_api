@@ -58,7 +58,7 @@ Sistema de reorganización masiva de archivos desde servidores SFTP origen a des
    - Lectura streaming del archivo origen (SFTP)
    - Creación de directorios en destino
    - Escritura streaming en destino (SFTP)
-   - Auditoría en MongoDB (`processed_files`)
+   - Auditoría en MongoDB (`organized-files-index`)
 
 ---
 
@@ -289,7 +289,7 @@ db.disorganized-files-index.insertMany([
 
 ---
 
-#### 2. `processed_files` (Auditoría de Archivos Procesados)
+#### 2. `organized-files-index` (Auditoría de Archivos Procesados)
 
 Registra el resultado del procesamiento de cada archivo.
 
@@ -325,19 +325,19 @@ Registra el resultado del procesamiento de cada archivo.
 
 ```javascript
 // Índice único en idUnico
-db.processed_files.createIndex(
+db.organized-files-index.createIndex(
     { "idUnico": 1 }, 
     { unique: true, name: "idx_idUnico_unique" }
 )
 
 // Índice compuesto para consultas por status y fecha
-db.processed_files.createIndex(
+db.organized-files-index.createIndex(
     { "status": 1, "processedAt": -1 }, 
     { name: "idx_status_processedAt" }
 )
 
 // Índice para búsquedas por fecha
-db.processed_files.createIndex(
+db.organized-files-index.createIndex(
     { "processedAt": -1 }, 
     { name: "idx_processedAt" }
 )
@@ -348,25 +348,25 @@ db.processed_files.createIndex(
 ```javascript
 use dvsmart_reorganization_dev
 
-db.createCollection("processed_files")
+db.createCollection("organized-files-index")
 
-db.processed_files.createIndex(
+db.organized-files-index.createIndex(
     { "idUnico": 1 }, 
     { unique: true, name: "idx_idUnico_unique" }
 )
 
-db.processed_files.createIndex(
+db.organized-files-index.createIndex(
     { "status": 1, "processedAt": -1 }, 
     { name: "idx_status_processedAt" }
 )
 
-db.processed_files.createIndex(
+db.organized-files-index.createIndex(
     { "processedAt": -1 }, 
     { name: "idx_processedAt" }
 )
 
 // Verificar índices creados
-db.processed_files.getIndexes()
+db.organized-files-index.getIndexes()
 ```
 
 **Ejemplos de Documentos:**
@@ -415,7 +415,7 @@ mongosh mongodb://localhost:27017/dvsmart_reorganization_dev <<EOF
 
 // Eliminar colecciones existentes (opcional)
 db.disorganized-files-index.drop();
-db.processed_files.drop();
+db.organized-files-index.drop();
 
 // Crear colección disorganized-files-index
 db.createCollection("disorganized-files-index");
@@ -455,11 +455,11 @@ db.disorganized-files-index.insertMany([
     }
 ]);
 
-// Crear colección processed_files
-db.createCollection("processed_files");
-db.processed_files.createIndex({ "idUnico": 1 }, { unique: true });
-db.processed_files.createIndex({ "status": 1, "processedAt": -1 });
-db.processed_files.createIndex({ "processedAt": -1 });
+// Crear colección organized-files-index
+db.createCollection("organized-files-index");
+db.organized-files-index.createIndex({ "idUnico": 1 }, { unique: true });
+db.organized-files-index.createIndex({ "status": 1, "processedAt": -1 });
+db.organized-files-index.createIndex({ "processedAt": -1 });
 
 print("✓ Base de datos inicializada correctamente");
 print("✓ Archivos insertados: " + db.disorganized-files-index.countDocuments());
@@ -481,7 +481,7 @@ chmod +x scripts/init-mongodb.sh
 
 #### Contar archivos por status
 ```javascript
-db.processed_files.aggregate([
+db.organized-files-index.aggregate([
     {
         $group: {
             _id: "$status",
@@ -493,7 +493,7 @@ db.processed_files.aggregate([
 
 #### Archivos fallidos en las últimas 24 horas
 ```javascript
-db.processed_files.find({
+db.organized-files-index.find({
     status: "FAILED",
     processedAt: { 
         $gte: new ISODate(new Date().getTime() - 24*60*60*1000) 
@@ -506,7 +506,7 @@ db.processed_files.find({
 db.disorganized-files-index.aggregate([
     {
         $lookup: {
-            from: "processed_files",
+            from: "organized-files-index",
             localField: "idUnico",
             foreignField: "idUnico",
             as: "processed"
@@ -527,7 +527,7 @@ db.disorganized-files-index.aggregate([
 
 #### Estadísticas de procesamiento
 ```javascript
-db.processed_files.aggregate([
+db.organized-files-index.aggregate([
     {
         $group: {
             _id: null,
@@ -840,14 +840,14 @@ public JobRegistry jobRegistry() {
 
 ---
 
-### Error: "Duplicate key error collection: processed_files"
+### Error: "Duplicate key error collection: organized-files-index"
 
 **Causa**: Intento de procesar el mismo archivo dos veces.
 
 **Solución**: Este es un comportamiento esperado. El sistema evita reprocesar archivos. Si necesitas reprocesar:
 ```javascript
 // Eliminar registro de auditoría
-db.processed_files.deleteOne({ idUnico: "file1-unique-id" })
+db.organized-files-index.deleteOne({ idUnico: "file1-unique-id" })
 ```
 
 ---
@@ -857,7 +857,7 @@ db.processed_files.deleteOne({ idUnico: "file1-unique-id" })
 **Diagnóstico**:
 ```javascript
 // Ver archivos procesados por minuto
-db.processed_files.aggregate([
+db.organized-files-index.aggregate([
     {
         $group: {
             _id: {

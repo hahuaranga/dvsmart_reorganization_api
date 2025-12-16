@@ -13,7 +13,7 @@
  */
 package com.indra.minsait.dvsmart.reorganization.adapter.out.batch.reader;
 
-import com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity.ArchivoIndexDocument;
+import com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity.DisorganizedFilesIndexDocument;
 import com.indra.minsait.dvsmart.reorganization.infrastructure.config.MongoConfigProperties;
 
 import lombok.RequiredArgsConstructor;
@@ -49,7 +49,7 @@ public class MongoIndexedFileItemReader {
      * 
      * @return MongoCursorItemReader configurado
      */
-    public MongoCursorItemReader<ArchivoIndexDocument> createReader() {
+    public MongoCursorItemReader<DisorganizedFilesIndexDocument> createReader() {
         // Query vacía = todos los documentos
         Document query = new Document();
         
@@ -57,11 +57,11 @@ public class MongoIndexedFileItemReader {
         Map<String, Sort.Direction> sorts = new HashMap<>();
         sorts.put("_id", Sort.Direction.ASC);
         
-        return new MongoCursorItemReaderBuilder<ArchivoIndexDocument>()
+        return new MongoCursorItemReaderBuilder<DisorganizedFilesIndexDocument>()
                 .name("archivoIndexCursorReader")
                 .template(mongoTemplate)
                 .jsonQuery(query.toJson())
-                .targetType(ArchivoIndexDocument.class)
+                .targetType(DisorganizedFilesIndexDocument.class)
                 .sorts(sorts)
                 .collection(properties.getDisorganizedFilesIndex())
                 .batchSize(100) // Tamaño del batch interno del cursor

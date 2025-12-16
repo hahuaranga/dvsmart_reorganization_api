@@ -13,8 +13,8 @@
  */
 package com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb;
 
-import com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity.ProcessedFileDocument;
-import com.indra.minsait.dvsmart.reorganization.application.port.out.ProcessedFileAuditRepository;
+import com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity.OrganizedFilesIndexDocument;
+import com.indra.minsait.dvsmart.reorganization.application.port.out.OrganizedFilesIndexRepository;
 import com.indra.minsait.dvsmart.reorganization.domain.model.ProcessedArchivo;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
-public class ProcessedFileAuditRepositoryImpl implements ProcessedFileAuditRepository {
+public class OrganizedFilesIndexRepositoryImpl implements OrganizedFilesIndexRepository {
 
     private final MongoTemplate mongoTemplate;
 
@@ -41,14 +41,14 @@ public class ProcessedFileAuditRepositoryImpl implements ProcessedFileAuditRepos
 
     @Override
     public void saveAll(List<ProcessedArchivo> archivos) {
-        List<ProcessedFileDocument> docs = archivos.stream()
+        List<OrganizedFilesIndexDocument> docs = archivos.stream()
                 .map(this::toDocument)
                 .collect(Collectors.toList());
-        mongoTemplate.insert(docs, ProcessedFileDocument.class);
+        mongoTemplate.insert(docs, OrganizedFilesIndexDocument.class);
     }
 
-    private ProcessedFileDocument toDocument(ProcessedArchivo archivo) {
-        return ProcessedFileDocument.builder()
+    private OrganizedFilesIndexDocument toDocument(ProcessedArchivo archivo) {
+        return OrganizedFilesIndexDocument.builder()
                 .idUnico(archivo.getIdUnico())
                 .rutaOrigen(archivo.getRutaOrigen())
                 .rutaDestino(archivo.getRutaDestino())

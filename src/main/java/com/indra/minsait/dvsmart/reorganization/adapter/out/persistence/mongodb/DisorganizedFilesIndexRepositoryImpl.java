@@ -13,8 +13,8 @@
  */
 package com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb;
 
-import com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity.ArchivoIndexDocument;
-import com.indra.minsait.dvsmart.reorganization.application.port.out.ArchivoIndexRepository;
+import com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity.DisorganizedFilesIndexDocument;
+import com.indra.minsait.dvsmart.reorganization.application.port.out.DisorganizedFilesIndexRepository;
 import com.indra.minsait.dvsmart.reorganization.domain.model.ArchivoLegacy;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.mongodb.core.MongoTemplate;
@@ -30,13 +30,13 @@ import java.util.stream.Collectors;
 
 @Repository
 @RequiredArgsConstructor
-public class ArchivoIndexRepositoryImpl implements ArchivoIndexRepository {
+public class DisorganizedFilesIndexRepositoryImpl implements DisorganizedFilesIndexRepository {
 
     private final MongoTemplate mongoTemplate;
 
     @Override
     public List<ArchivoLegacy> findAll() {
-        return mongoTemplate.findAll(ArchivoIndexDocument.class).stream()
+        return mongoTemplate.findAll(DisorganizedFilesIndexDocument.class).stream()
                 .map(this::toModel)
                 .collect(Collectors.toList());
     }
@@ -44,10 +44,10 @@ public class ArchivoIndexRepositoryImpl implements ArchivoIndexRepository {
     @Override
     public long count() {
         return mongoTemplate.count(new org.springframework.data.mongodb.core.query.Query(), 
-                                    ArchivoIndexDocument.class);
+                                    DisorganizedFilesIndexDocument.class);
     }
 
-    private ArchivoLegacy toModel(ArchivoIndexDocument doc) {
+    private ArchivoLegacy toModel(DisorganizedFilesIndexDocument doc) {
         return ArchivoLegacy.builder()
                 .idUnico(doc.getIdUnico())
                 .rutaOrigen(doc.getRutaOrigen())

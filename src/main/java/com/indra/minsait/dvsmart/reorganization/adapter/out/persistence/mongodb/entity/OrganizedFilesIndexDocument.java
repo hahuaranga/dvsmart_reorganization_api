@@ -13,6 +13,7 @@
  */
 package com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity;
 
+import lombok.Builder;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
@@ -21,13 +22,14 @@ import java.time.Instant;
 
 /**
  * Author: hahuaranga@indracompany.com
- * Created on: 12-12-2025 at 12:59:24
- * File: ArchivoIndexDocument.java
+ * Created on: 12-12-2025 at 13:00:35
+ * File: ProcessedFileDocument.java
  */
 
 @Data
-@Document(collection = "disorganized-files-index")
-public class ArchivoIndexDocument {
+@Builder
+@Document(collection = "organized-files-index")
+public class OrganizedFilesIndexDocument {
     
     @Id
     private String id;
@@ -36,17 +38,9 @@ public class ArchivoIndexDocument {
     private String idUnico;
     
     private String rutaOrigen;
+    private String rutaDestino;
     private String nombre;
-    
-    // Mantiene la fecha de modificación del archivo
-    private Instant mtime;
-    
-    // Nuevo campo: tamaño del archivo (corresponde a NumberLong en MongoDB)
-    private Long tamanio;
-    
-    // Nuevo campo: extensión del archivo
-    private String extension;
-    
-    // Nuevo campo: fecha en que el documento fue indexado (corresponde a Date en MongoDB)
-    private Instant indexadoEn;    
+    private String status;
+    private Instant processedAt;
+    private String errorMessage;
 }

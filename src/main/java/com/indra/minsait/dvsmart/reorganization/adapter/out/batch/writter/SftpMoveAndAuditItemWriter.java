@@ -13,7 +13,7 @@
  */
 package com.indra.minsait.dvsmart.reorganization.adapter.out.batch.writter;
 
-import com.indra.minsait.dvsmart.reorganization.application.port.out.ProcessedFileAuditRepository;
+import com.indra.minsait.dvsmart.reorganization.application.port.out.OrganizedFilesIndexRepository;
 import com.indra.minsait.dvsmart.reorganization.application.port.out.SftpDestinationRepository;
 import com.indra.minsait.dvsmart.reorganization.application.port.out.SftpOriginRepository;
 import com.indra.minsait.dvsmart.reorganization.domain.model.ArchivoLegacy;
@@ -43,7 +43,7 @@ public class SftpMoveAndAuditItemWriter implements ItemWriter<ArchivoLegacy> {
 
     private final SftpOriginRepository originRepo;
     private final SftpDestinationRepository destRepo;
-    private final ProcessedFileAuditRepository auditRepo;
+    private final OrganizedFilesIndexRepository auditRepo;
     private final FileReorganizationService reorganizationService;
     private final SftpConfigProperties props;
 
