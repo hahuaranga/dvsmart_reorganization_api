@@ -83,7 +83,7 @@ public class BatchReorgFullConfig {
         executor.setCorePoolSize(batchProps.getThreadPoolSize());
         executor.setMaxPoolSize(batchProps.getThreadPoolSize());
         executor.setQueueCapacity(batchProps.getQueueCapacity());
-        executor.setThreadNamePrefix("batch-async-");
+        executor.setThreadNamePrefix("batch-reorg-async-");
         executor.setWaitForTasksToCompleteOnShutdown(true);
         executor.setAwaitTerminationSeconds(60);
         executor.initialize();
