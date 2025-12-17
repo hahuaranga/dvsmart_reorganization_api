@@ -1,941 +1,679 @@
-# DVSmart Reorganization API
+# DvSmart Reorganization API
 
-Sistema de reorganización masiva de archivos desde servidores SFTP origen a destino, utilizando particionado hash (SHA-256) para distribución uniforme.
+## 📋 Descripción
 
-## 📋 Tabla de Contenidos
+API de reorganización masiva de archivos que transfiere millones de archivos desde un servidor SFTP de origen hacia un servidor SFTP de destino, organizándolos automáticamente en una estructura de directorios basada en hash SHA-256 para optimizar el acceso y distribución.
 
-- [Arquitectura](#arquitectura)
-- [Stack Tecnológico](#stack-tecnológico)
-- [Requisitos Previos](#requisitos-previos)
-- [Instalación](#instalación)
-- [Configuración](#configuración)
-- [Base de Datos MongoDB](#base-de-datos-mongodb)
-- [Ejecución](#ejecución)
-- [API REST](#api-rest)
-- [Monitoreo](#monitoreo)
-- [Troubleshooting](#troubleshooting)
-
----
+### Características Principales
+- **Transferencia Masiva**: Optimizada para millones de archivos con Spring Batch
+- **Arquitectura Hexagonal**: Separación clara de responsabilidades con puertos/adaptadores
+- **Hash Partitioning**: Organización automática basada en SHA-256
+- **Procesamiento Asíncrono**: Paralelización con AsyncItemProcessor y ThreadPool
+- **SFTP Streaming**: Transferencia directa sin almacenamiento temporal
+- **Auditoría Completa**: Trazabilidad de todos los archivos procesados
+- **Configuración Externa**: Propiedades configurables por entorno
 
 ## 🏗️ Arquitectura
 
-### Patrón de Diseño
-- **Arquitectura Hexagonal (Ports & Adapters)**
-- **Domain-Driven Design (DDD)**
-- **Spring Batch Chunk-Oriented Processing**
-
-### Componentes Principales
-
+### Diagrama de Flujo
 ```
-┌─────────────────┐
-│   REST API      │ ← Endpoint de inicio de jobs
-└────────┬────────┘
-         │
-┌────────▼────────────────────────────────────────┐
-│         Spring Batch Job                        │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐     │
-│  │  Reader  │→ │Processor │→ │  Writer  │     │
-│  │ (MongoDB)│  │ (Hash)   │  │ (SFTP)   │     │
-│  └──────────┘  └──────────┘  └──────────┘     │
-└─────────────────────────────────────────────────┘
-         │                              		│
-┌────────▼────────┐            				┌───────▼────────┐
-│   MongoDB       │            				│  SFTP Servers  │
-│  - disorganized-files-index│            │  - Origin      │
-│  - processed_   │            				│  - Destination │
-│    files        │            				└────────────────┘
-└─────────────────┘
-```
-
-### Flujo de Procesamiento
-
-1. **Lectura**: Cursor streaming de MongoDB (`disorganized-files-index`)
-2. **Procesamiento Asíncrono**:
-   - Conversión de documento → modelo de dominio
-   - Cálculo de hash SHA-256
-   - Generación de path destino (particionado)
-3. **Escritura**:
-   - Lectura streaming del archivo origen (SFTP)
-   - Creación de directorios en destino
-   - Escritura streaming en destino (SFTP)
-   - Auditoría en MongoDB (`organized-files-index`)
-
----
-
-## 🛠️ Stack Tecnológico
-
-| Componente | Versión | Propósito |
-|------------|---------|-----------|
-| Java | 21 (LTS) | Runtime |
-| Spring Boot | 4.0.0 | Framework base |
-| Spring Batch | 6.0.0 | Procesamiento batch |
-| Spring Integration | 7.0.0 | Integración SFTP |
-| MongoDB | 7.0+ | Persistencia |
-| Apache MINA SSHD | (via SSHJ 0.38.0) | Cliente SFTP |
-| Lombok | 1.18.30 | Reducción de boilerplate |
-| Maven | 3.9+ | Build tool |
-
----
-
-## 📦 Requisitos Previos
-
-### Software Requerido
-
-- **JDK 21** o superior
-- **Maven 3.9+**
-- **Docker** y **Docker Compose** (para desarrollo local)
-- **MongoDB 7.0+**
-- Acceso a servidores **SFTP** (origen y destino)
-
-### Puertos Utilizados
-
-| Servicio | Puerto | Descripción |
-|----------|--------|-------------|
-| API REST | 8080 | Endpoint HTTP |
-| MongoDB | 27017 | Base de datos |
-| SFTP Origin | 2222 | Servidor SFTP origen (dev) |
-| SFTP Destination | 2223 | Servidor SFTP destino (dev) |
-| Mongo Express | 8081 | UI MongoDB (opcional) |
-
----
-
-## 💾 Instalación
-
-### 1. Clonar el Repositorio
-
-```bash
-git clone https://github.com/tu-org/dvsmart_reorganization_api.git
-cd dvsmart_reorganization_api
+┌─────────────────────────────────────────────────────────────┐
+│                  BatchReorganizeController                  │
+│                  (REST API /api/batch/reorganize/full)      │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+┌───────────────────────▼─────────────────────────────────────┐
+│                StartReorganizeFullService                   │
+│                (Application Service)                         │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+┌───────────────────────▼─────────────────────────────────────┐
+│                 BatchReorgFullConfig                        │
+│                 (Spring Batch Job)                          │
+└──────────────┬──────────────┬──────────────┬────────────────┘
+               │              │              │
+    ┌──────────▼─────┐  ┌────▼─────────┐  ┌─▼────────────────┐
+    │MongoIndexed    │  │Composite     │  │SftpMoveAndAudit │
+    │FileItemReader  │  │Processor     │  │ItemWriter       │
+    │(MongoDB Cursor)│  │(Hash Calc)   │  │(SFTP Transfer)  │
+    └────────────────┘  └──────────────┘  └─────────────────┘
+               │              │              │
+    ┌──────────▼─────┐  ┌────▼─────────┐  ┌─▼────────────────┐
+    │Disorganized    │  │ArchivoLegacy │  │ProcessedArchivo  │
+    │FilesIndex      │  │(Domain)      │  │(Audit)           │
+    │(MongoDB)       │  │              │  │                  │
+    └────────────────┘  └──────────────┘  └─────────────────┘
 ```
 
-### 2. Compilar el Proyecto
+### Componentes Clave
+1. **Controller REST**: Expone endpoint para iniciar reorganización
+2. **Spring Batch Job**: Orquesta todo el proceso de transferencia
+3. **Reader MongoDB**: Lee eficientemente millones de registros con cursor
+4. **Processor Hash**: Calcula SHA-256 para estructura de directorios
+5. **Writer SFTP**: Transfiere y audita archivos en paralelo
 
-```bash
-mvn clean install
+## 📁 Estructura del Proyecto
+
 ```
-
-### 3. Levantar Infraestructura (Desarrollo Local)
-
-```bash
-# Levantar MongoDB + SFTP servers
-docker-compose up -d
-
-# Verificar que estén corriendo
-docker-compose ps
+dvsmart_reorganization_api/
+├── src/main/java/com/indra/minsait/dvsmart/reorganization/
+│   ├── adapter/
+│   │   ├── in/web/
+│   │   │   └── BatchReorganizeController.java         # REST Endpoint
+│   │   ├── out/batch/
+│   │   │   ├── config/BatchReorgFullConfig.java       # Configuración Batch
+│   │   │   ├── reader/MongoIndexedFileItemReader.java # MongoDB Reader
+│   │   │   └── writer/SftpMoveAndAuditItemWriter.java # SFTP Writer
+│   │   ├── out/persistence/mongodb/
+│   │   │   ├── entity/
+│   │   │   │   ├── DisorganizedFilesIndexDocument.java # Índice origen
+│   │   │   │   └── OrganizedFilesIndexDocument.java    # Índice destino
+│   │   │   └── *RepositoryImpl.java                    # Implementaciones
+│   │   └── out/sftp/
+│   │       ├── SftpOriginRepositoryImpl.java          # SFTP Origen
+│   │       └── SftpDestinationRepositoryImpl.java     # SFTP Destino
+│   ├── application/
+│   │   ├── port/
+│   │   │   ├── in/StartReorganizeFullUseCase.java     # Puerto entrada
+│   │   │   └── out/                                   # Puertos salida
+│   │   │       ├── DisorganizedFilesIndexRepository.java
+│   │   │       ├── OrganizedFilesIndexRepository.java
+│   │   │       ├── SftpOriginRepository.java
+│   │   │       └── SftpDestinationRepository.java
+│   │   └── service/
+│   │       └── StartReorganizeFullService.java        # Servicio app
+│   ├── domain/
+│   │   ├── model/
+│   │   │   ├── ArchivoLegacy.java                     # Modelo dominio
+│   │   │   └── ProcessedArchivo.java                  # Auditoría
+│   │   └── service/
+│   │       └── FileReorganizationService.java         # Lógica hash
+│   └── infrastructure/
+│       ├── config/
+│       │   ├── BatchConfigProperties.java             # Props Batch
+│       │   ├── MongoConfigProperties.java             # Props MongoDB
+│       │   └── SftpConfigProperties.java              # Props SFTP
+│       ├── exception/GlobalExceptionHandler.java      # Manejo errores
+│       ├── sftp/SftpSessionFactoryConfig.java         # Config SFTP
+│       └── ServiceApplication.java                    # Main class
+├── src/main/resources/
+│   ├── application.properties                         # Configuración
+│   └── license-header.txt                            # Copyright header
+├── pom.xml                                            # Dependencias Maven
+└── README.md                                         # Esta documentación
 ```
-
-### 4. Poblar Datos de Prueba
-
-Ver sección [Datos de Prueba](#datos-de-prueba).
-
----
 
 ## ⚙️ Configuración
 
-### Archivo de Propiedades
+### Requisitos Previos
+- **Java 21** JDK
+- **Maven 3.6+**
+- **MongoDB 4.4+** (para índices de archivos)
+- **Servidores SFTP** (origen y destino accesibles)
+- **8GB RAM mínimo** (recomendado para procesamiento masivo)
 
-El proyecto utiliza perfiles de Spring:
+### Configuración de Propiedades (`application.properties`)
 
-```
-src/main/resources/
-├── application.properties              # Configuración base
-├── application-dev.properties          # Desarrollo local
-├── application-prod.properties         # Producción
-└── application-test.properties         # Testing
-```
+```properties
+# ============================================================================
+# CONFIGURACIÓN GENERAL
+# ============================================================================
+spring.application.name=dvsmart-reorganization-api
+server.port=8080
 
-### Variables de Entorno (Producción)
+# ============================================================================
+# MONGODB - Índices de Archivos
+# ============================================================================
+spring.mongodb.uri=mongodb://usuario:contraseña@host:27017/dvsmart_reorganization
+mongo.disorganized-files-index=disorganized-files-index  # Colección origen
 
-```bash
-# SFTP Origin
-export SFTP_ORIGIN_HOST=sftp-prod-origin.example.com
-export SFTP_ORIGIN_PORT=22
-export SFTP_ORIGIN_USER=prod_user
-export SFTP_ORIGIN_PASSWORD=secure_password
-export SFTP_ORIGIN_BASE_DIR=/data/production/legacy
+# ============================================================================
+# SPRING BATCH - Configuración Procesamiento
+# ============================================================================
+spring.batch.job.enabled=false  # Deshabilitar auto-inicio
 
-# SFTP Destination
-export SFTP_DEST_HOST=sftp-prod-dest.example.com
-export SFTP_DEST_PORT=22
-export SFTP_DEST_USER=prod_user
-export SFTP_DEST_PASSWORD=secure_password
-export SFTP_DEST_BASE_DIR=/data/production/reorganized
-```
+# Tamaño de chunk (registros por transacción)
+batch.chunk-size=100
 
-### Parámetros de Configuración
+# Pool de threads para procesamiento paralelo
+batch.thread-pool-size=20
 
-#### Batch Configuration (`batch.*`)
+# Capacidad de cola para tareas pendientes
+batch.queue-capacity=1000
 
-| Propiedad | Tipo | Default | Descripción |
-|-----------|------|---------|-------------|
-| `batch.chunk-size` | int | 100 | Registros por chunk |
-| `batch.concurrency-limit` | int | 10 | Límite de concurrencia (deprecado) |
-| `batch.thread-pool-size` | int | 20 | Threads para procesamiento paralelo |
-| `batch.queue-capacity` | int | 1000 | Capacidad de cola de tareas |
+# ============================================================================
+# SFTP ORIGEN - Archivos Desorganizados
+# ============================================================================
+sftp.origin.host=sftp-origen.tudominio.com
+sftp.origin.port=22
+sftp.origin.user=usuario_origen
+sftp.origin.password=contraseña_origen
+sftp.origin.base-dir=/ruta/origen/archivos
+sftp.origin.timeout=30000
+sftp.origin.pool.size=10  # Conexiones simultáneas
 
-**Recomendaciones por ambiente:**
-- **Dev**: chunk-size=10, thread-pool-size=5
-- **Test**: chunk-size=5, thread-pool-size=2
-- **Prod**: chunk-size=100, thread-pool-size=30
+# ============================================================================
+# SFTP DESTINO - Archivos Organizados
+# ============================================================================
+sftp.dest.host=sftp-destino.tudominio.com
+sftp.dest.port=22
+sftp.dest.user=usuario_destino
+sftp.dest.password=contraseña_destino
+sftp.dest.base-dir=/data/reorganized  # Base para hash partitioning
+sftp.dest.timeout=30000
+sftp.dest.pool.size=10
 
-#### SFTP Origin Configuration (`sftp.origin.*`)
-
-| Propiedad | Tipo | Default | Descripción |
-|-----------|------|---------|-------------|
-| `sftp.origin.host` | String | - | Hostname del servidor SFTP |
-| `sftp.origin.port` | int | 22 | Puerto SSH |
-| `sftp.origin.user` | String | - | Usuario SFTP |
-| `sftp.origin.password` | String | - | Contraseña SFTP |
-| `sftp.origin.base-dir` | String | - | Directorio base origen |
-| `sftp.origin.timeout` | int | 30000 | Timeout en ms |
-| `sftp.origin.pool.size` | int | 10 | Tamaño del pool de conexiones |
-
-#### SFTP Destination Configuration (`sftp.dest.*`)
-
-| Propiedad | Tipo | Default | Descripción |
-|-----------|------|---------|-------------|
-| `sftp.dest.host` | String | - | Hostname del servidor SFTP |
-| `sftp.dest.port` | int | 22 | Puerto SSH |
-| `sftp.dest.user` | String | - | Usuario SFTP |
-| `sftp.dest.password` | String | - | Contraseña SFTP |
-| `sftp.dest.base-dir` | String | - | Directorio base destino |
-| `sftp.dest.timeout` | int | 30000 | Timeout en ms |
-| `sftp.dest.pool.size` | int | 10 | Tamaño del pool de conexiones |
-
----
-
-## 🗄️ Base de Datos MongoDB
-
-### Colecciones
-
-#### 1. `disorganized-files-index` (Índice de Archivos Origen)
-
-Contiene el inventario de archivos a reorganizar.
-
-**Estructura del Documento:**
-
-```javascript
-{
-    "_id": ObjectId("674c5e1a2b3f4a5e6d7c8b9a"),
-    "idUnico": "file-sha256-hash-12345",
-    "rutaOrigen": "/home/testuser/upload/origin/dir1/file1.txt",
-    "nombre": "file1.txt",
-    "mtime": ISODate("2025-12-13T20:30:00.000Z")
-}
+# ============================================================================
+# LOGGING - Monitoreo y Debug
+# ============================================================================
+logging.level.com.indra.minsait.dvsmart.reorganization=INFO
+logging.level.org.springframework.batch=INFO
+logging.level.org.springframework.integration.sftp=WARN
+logging.file.name=logs/reorganization.log
+logging.file.max-size=10MB
+logging.file.max-history=30
 ```
 
-**Campos:**
+### 🔧 Configuración del Hash Partitioning
 
-| Campo | Tipo | Obligatorio | Descripción |
-|-------|------|-------------|-------------|
-| `_id` | ObjectId | Sí | ID MongoDB (auto-generado) |
-| `idUnico` | String | Sí | Identificador único del archivo |
-| `rutaOrigen` | String | Sí | Path completo en SFTP origen |
-| `nombre` | String | Sí | Nombre del archivo |
-| `mtime` | Date | Sí | Fecha de última modificación |
+#### Algoritmo de Organización
+Los archivos se organizan automáticamente usando SHA-256:
 
-**Índices:**
+```java
+// Ejemplo: Archivo "/data/legacy/files/documento.pdf"
+String input = "/data/legacy/files/documento.pdf" + "documento.pdf";
+String hash = sha256(input); // Ej: "a1b2c3d4e5f6..."
 
-```javascript
-// Índice único en idUnico
-db.disorganized-files-index.createIndex(
-    { "idUnico": 1 }, 
-    { unique: true, name: "idx_idUnico_unique" }
-)
-
-// Índice por defecto en _id (auto-creado)
-db.disorganized-files-index.createIndex(
-    { "_id": 1 }
-)
+// Estructura resultante (3 niveles, 2 caracteres cada uno):
+// /data/reorganized/a1/b2/c3/documento.pdf
 ```
 
-**Script de Creación:**
-
-```javascript
-use dvsmart_reorganization_dev
-
-db.createCollection("disorganized-files-index")
-
-db.disorganized-files-index.createIndex(
-    { "idUnico": 1 }, 
-    { unique: true, name: "idx_idUnico_unique" }
-)
-```
-
-**Ejemplo de Inserción:**
-
-```javascript
-db.disorganized-files-index.insertMany([
-    {
-        idUnico: "file1-unique-id",
-        rutaOrigen: "/home/testuser/upload/origin/dir1/file1.txt",
-        nombre: "file1.txt",
-        mtime: new Date()
-    },
-    {
-        idUnico: "file2-unique-id",
-        rutaOrigen: "/home/testuser/upload/origin/dir1/file2.pdf",
-        nombre: "file2.pdf",
-        mtime: new Date()
-    },
-    {
-        idUnico: "file3-unique-id",
-        rutaOrigen: "/home/testuser/upload/origin/dir2/file3.jpg",
-        nombre: "file3.jpg",
-        mtime: new Date()
-    }
-])
-```
-
----
-
-#### 2. `organized-files-index` (Auditoría de Archivos Procesados)
-
-Registra el resultado del procesamiento de cada archivo.
-
-**Estructura del Documento:**
-
-```javascript
-{
-    "_id": ObjectId("674c5f2b3c4d5e6f7a8b9c0d"),
-    "idUnico": "file-sha256-hash-12345",
-    "rutaOrigen": "/home/testuser/upload/origin/dir1/file1.txt",
-    "rutaDestino": "/home/testuser/upload/destination/a1/b2/c3/file1.txt",
-    "nombre": "file1.txt",
-    "status": "SUCCESS",
-    "processedAt": ISODate("2025-12-13T22:35:10.123Z"),
-    "errorMessage": null
-}
-```
-
-**Campos:**
-
-| Campo | Tipo | Obligatorio | Descripción |
-|-------|------|-------------|-------------|
-| `_id` | ObjectId | Sí | ID MongoDB (auto-generado) |
-| `idUnico` | String | Sí | Identificador único (mismo que `disorganized-files-index`) |
-| `rutaOrigen` | String | Sí | Path original en SFTP origen |
-| `rutaDestino` | String | Sí | Path calculado en SFTP destino |
-| `nombre` | String | Sí | Nombre del archivo |
-| `status` | String | Sí | `SUCCESS` o `FAILED` |
-| `processedAt` | Date | Sí | Timestamp de procesamiento |
-| `errorMessage` | String | No | Mensaje de error (solo si `FAILED`) |
-
-**Índices:**
-
-```javascript
-// Índice único en idUnico
-db.organized-files-index.createIndex(
-    { "idUnico": 1 }, 
-    { unique: true, name: "idx_idUnico_unique" }
-)
-
-// Índice compuesto para consultas por status y fecha
-db.organized-files-index.createIndex(
-    { "status": 1, "processedAt": -1 }, 
-    { name: "idx_status_processedAt" }
-)
-
-// Índice para búsquedas por fecha
-db.organized-files-index.createIndex(
-    { "processedAt": -1 }, 
-    { name: "idx_processedAt" }
-)
-```
-
-**Script de Creación:**
-
-```javascript
-use dvsmart_reorganization_dev
-
-db.createCollection("organized-files-index")
-
-db.organized-files-index.createIndex(
-    { "idUnico": 1 }, 
-    { unique: true, name: "idx_idUnico_unique" }
-)
-
-db.organized-files-index.createIndex(
-    { "status": 1, "processedAt": -1 }, 
-    { name: "idx_status_processedAt" }
-)
-
-db.organized-files-index.createIndex(
-    { "processedAt": -1 }, 
-    { name: "idx_processedAt" }
-)
-
-// Verificar índices creados
-db.organized-files-index.getIndexes()
-```
-
-**Ejemplos de Documentos:**
-
-**Archivo procesado exitosamente:**
-```javascript
-{
-    "_id": ObjectId("674c5f2b3c4d5e6f7a8b9c0d"),
-    "idUnico": "file1-unique-id",
-    "rutaOrigen": "/home/testuser/upload/origin/dir1/file1.txt",
-    "rutaDestino": "/home/testuser/upload/destination/a1/b2/c3/file1.txt",
-    "nombre": "file1.txt",
-    "status": "SUCCESS",
-    "processedAt": ISODate("2025-12-13T22:35:10.123Z"),
-    "errorMessage": null
-}
-```
-
-**Archivo con error:**
-```javascript
-{
-    "_id": ObjectId("674c5f2b3c4d5e6f7a8b9c0e"),
-    "idUnico": "file2-unique-id",
-    "rutaOrigen": "/home/testuser/upload/origin/dir1/file2.pdf",
-    "rutaDestino": "/home/testuser/upload/destination/d4/e5/f6/file2.pdf",
-    "nombre": "file2.pdf",
-    "status": "FAILED",
-    "processedAt": ISODate("2025-12-13T22:35:15.456Z"),
-    "errorMessage": "Failed to read file from origin SFTP: Permission denied"
-}
-```
-
----
-
-### Datos de Prueba
-
-#### Script Completo de Inicialización
-
-```bash
-#!/bin/bash
-# scripts/init-mongodb.sh
-
-echo "Inicializando base de datos MongoDB..."
-
-mongosh mongodb://localhost:27017/dvsmart_reorganization_dev <<EOF
-
-// Eliminar colecciones existentes (opcional)
-db.disorganized-files-index.drop();
-db.organized-files-index.drop();
-
-// Crear colección disorganized-files-index
-db.createCollection("disorganized-files-index");
-db.disorganized-files-index.createIndex({ "idUnico": 1 }, { unique: true });
-
-// Insertar archivos de prueba
-db.disorganized-files-index.insertMany([
-    {
-        idUnico: "file1-unique-id",
-        rutaOrigen: "/home/testuser/upload/origin/dir1/file1.txt",
-        nombre: "file1.txt",
-        mtime: new Date()
-    },
-    {
-        idUnico: "file2-unique-id",
-        rutaOrigen: "/home/testuser/upload/origin/dir1/file2.pdf",
-        nombre: "file2.pdf",
-        mtime: new Date()
-    },
-    {
-        idUnico: "file3-unique-id",
-        rutaOrigen: "/home/testuser/upload/origin/dir2/file3.jpg",
-        nombre: "file3.jpg",
-        mtime: new Date()
-    },
-    {
-        idUnico: "file4-unique-id",
-        rutaOrigen: "/home/testuser/upload/origin/dir3/file4.doc",
-        nombre: "file4.doc",
-        mtime: new Date()
-    },
-    {
-        idUnico: "file5-unique-id",
-        rutaOrigen: "/home/testuser/upload/origin/file5.txt",
-        nombre: "file5.txt",
-        mtime: new Date()
-    }
-]);
-
-// Crear colección organized-files-index
-db.createCollection("organized-files-index");
-db.organized-files-index.createIndex({ "idUnico": 1 }, { unique: true });
-db.organized-files-index.createIndex({ "status": 1, "processedAt": -1 });
-db.organized-files-index.createIndex({ "processedAt": -1 });
-
-print("✓ Base de datos inicializada correctamente");
-print("✓ Archivos insertados: " + db.disorganized-files-index.countDocuments());
-
-EOF
-
-echo "✓ MongoDB inicializado"
-```
-
-**Ejecutar script:**
-```bash
-chmod +x scripts/init-mongodb.sh
-./scripts/init-mongodb.sh
-```
-
----
-
-### Consultas Útiles
-
-#### Contar archivos por status
-```javascript
-db.organized-files-index.aggregate([
-    {
-        $group: {
-            _id: "$status",
-            count: { $sum: 1 }
-        }
-    }
-])
-```
-
-#### Archivos fallidos en las últimas 24 horas
-```javascript
-db.organized-files-index.find({
-    status: "FAILED",
-    processedAt: { 
-        $gte: new ISODate(new Date().getTime() - 24*60*60*1000) 
-    }
-}).sort({ processedAt: -1 })
-```
-
-#### Archivos pendientes de procesar
-```javascript
-db.disorganized-files-index.aggregate([
-    {
-        $lookup: {
-            from: "organized-files-index",
-            localField: "idUnico",
-            foreignField: "idUnico",
-            as: "processed"
-        }
-    },
-    {
-        $match: {
-            processed: { $eq: [] }
-        }
-    },
-    {
-        $project: {
-            processed: 0
-        }
-    }
-])
-```
-
-#### Estadísticas de procesamiento
-```javascript
-db.organized-files-index.aggregate([
-    {
-        $group: {
-            _id: null,
-            total: { $sum: 1 },
-            exitosos: {
-                $sum: { $cond: [{ $eq: ["$status", "SUCCESS"] }, 1, 0] }
-            },
-            fallidos: {
-                $sum: { $cond: [{ $eq: ["$status", "FAILED"] }, 1, 0] }
-            },
-            ultimoProcesado: { $max: "$processedAt" }
-        }
-    }
-])
-```
-
----
-
-## 🚀 Ejecución
-
-### Desarrollo Local
-
-```bash
-# Con Maven
-mvn spring-boot:run -Dspring-boot.run.profiles=dev
-
-# Con JAR
-java -jar target/dvsmart_reorganization_api.jar --spring.profiles.active=dev
-```
-
-### Producción
-
-```bash
-# Configurar variables de entorno (ver sección Configuración)
-export SFTP_ORIGIN_HOST=...
-export SFTP_ORIGIN_USER=...
-# ... resto de variables
-
-# Ejecutar con perfil prod
-java -jar target/dvsmart_reorganization_api.jar --spring.profiles.active=prod
-```
-
-### Con Docker (Opcional)
-
-```dockerfile
-# Dockerfile
-FROM eclipse-temurin:21-jre
-WORKDIR /app
-COPY target/dvsmart_reorganization_api.jar app.jar
-EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
-```
-
-```bash
-# Build
-docker build -t dvsmart-reorganization-api:1.0.0 .
-
-# Run
-docker run -d \
-  -p 8080:8080 \
-  -e SPRING_PROFILES_ACTIVE=prod \
-  -e SFTP_ORIGIN_HOST=... \
-  --name dvsmart-api \
-  dvsmart-reorganization-api:1.0.0
-```
-
----
-
-## 📡 API REST
-
-### Base URL
-```
-http://localhost:8080/api
-```
-
-### Endpoints
-
-#### 1. Iniciar Reorganización Completa
-
-Inicia un job batch para reorganizar todos los archivos indexados.
-
-**Request:**
-```http
-POST /api/batch/reorganize/full
-Content-Type: application/json
-```
-
-**Response (202 Accepted):**
-```json
-{
-    "message": "Batch job started successfully",
-    "jobExecutionId": 1,
-    "status": "ACCEPTED"
-}
-```
-
-**Códigos de Estado:**
-- `202 Accepted` - Job iniciado correctamente
-- `500 Internal Server Error` - Error al iniciar el job
-
-**Ejemplo con cURL:**
-```bash
-curl -X POST http://localhost:8080/api/batch/reorganize/full
-```
-
-**Ejemplo con HTTPie:**
-```bash
-http POST http://localhost:8080/api/batch/reorganize/full
-```
-
-**Ejemplo con Postman:**
-```
-Method: POST
-URL: http://localhost:8080/api/batch/reorganize/full
-Headers: (ninguno necesario)
-Body: (vacío)
-```
-
----
-
-### Actuator Endpoints
-
-Spring Boot Actuator proporciona endpoints de monitoreo.
-
-#### Health Check
-```http
-GET /actuator/health
-```
-
-**Response:**
-```json
-{
-    "status": "UP",
-    "components": {
-        "db": {
-            "status": "UP",
-            "details": {
-                "database": "MongoDB",
-                "validationQuery": "ismaster()"
-            }
-        },
-        "diskSpace": {
-            "status": "UP",
-            "details": {
-                "total": 500000000000,
-                "free": 250000000000,
-                "threshold": 10485760
-            }
-        }
-    }
-}
-```
-
-#### Batch Jobs Info
-```http
-GET /actuator/batch
-```
-
-#### Métricas
-```http
-GET /actuator/metrics
-```
-
----
-
-## 📊 Monitoreo
-
-### Logs
-
-Los logs se escriben en:
-- **Consola**: Para desarrollo
-- **Archivo**: `logs/reorganization.log` (rotación automática)
-
-**Niveles de log por componente:**
-
-| Componente | Nivel | Descripción |
-|------------|-------|-------------|
-| `com.indra.minsait.dvsmart.reorganization` | DEBUG | Logs de aplicación |
-| `org.springframework.batch` | INFO | Logs de Spring Batch |
-| `org.springframework.integration.sftp` | DEBUG | Logs de SFTP |
-| `org.springframework.data.mongodb` | INFO | Logs de MongoDB |
-
-**Ejemplo de logs exitosos:**
-```
-2025-12-13 22:30:15 - BatchReorganizeController - Received request to start full reorganization
-2025-12-13 22:30:15 - StartReorganizeFullService - Job launched successfully. JobExecutionId: 1
-2025-12-13 22:30:16 - SftpMoveAndAuditItemWriter - Successfully transferred: /origin/file1.txt -> /dest/a1/b2/c3/file1.txt
-```
-
-### Métricas JVM
-
-Disponibles en `/actuator/metrics`:
-
-- `jvm.memory.used`
-- `jvm.threads.live`
-- `jvm.gc.pause`
-- `process.cpu.usage`
-
-### Monitoreo de Jobs
-
-**Consultar estado del job en MongoDB:**
-
-Spring Batch almacena metadatos en colecciones:
-- `BATCH_JOB_INSTANCE`
-- `BATCH_JOB_EXECUTION`
-- `BATCH_STEP_EXECUTION`
-
-```javascript
-// Ver últimas ejecuciones
-db.BATCH_JOB_EXECUTION.find().sort({ START_TIME: -1 }).limit(10)
-
-// Ver estadísticas del último job
-db.BATCH_STEP_EXECUTION.find({ 
-    JOB_EXECUTION_ID: 1 
-})
-```
-
----
-
-## 🎯 Algoritmo de Particionado Hash
-
-### Descripción
-
-Los archivos se distribuyen en una estructura de directorios basada en el hash SHA-256 de su ruta + nombre.
-
-### Configuración
+#### Parámetros Configurables
+En `FileReorganizationService.java`:
 
 ```java
 private static final int PARTITION_DEPTH = 3;      // Niveles de directorios
 private static final int CHARS_PER_LEVEL = 2;      // Caracteres por nivel
 ```
 
-### Ejemplo
+#### Cálculo de Distribución
+- **256^6 posibilidades** (16^6 = 16.7M combinaciones)
+- **Distribución uniforme** gracias a SHA-256
+- **Profundidad ajustable** según necesidades
 
-**Archivo origen:**
+#### Ejemplos de Rutas Generadas
+| Archivo Origen | Hash SHA-256 (primeros 6 chars) | Ruta Destino |
+|----------------|----------------------------------|--------------|
+| `/data/file1.txt` | `a1b2c3d4e5...` | `/data/reorganized/a1/b2/c3/file1.txt` |
+| `/docs/report.pdf` | `f6e5d4c3b2...` | `/data/reorganized/f6/e5/d4/report.pdf` |
+| `/images/photo.jpg` | `1a2b3c4d5e...` | `/data/reorganized/1a/2b/3c/photo.jpg` |
+
+#### Beneficios del Hash Partitioning
+1. **Distribución Uniforme**: Evita directorios con millones de archivos
+2. **Búsqueda Eficiente**: Puede calcularse la ruta sin consultar DB
+3. **Escalabilidad**: Fácil de expandir con más niveles
+4. **Consistencia**: Mismo archivo → misma ubicación siempre
+
+### Perfiles Maven
+- **dev** (activo por defecto): Desarrollo local
+- **prod**: Configuración producción
+
+```bash
+# Desarrollo
+mvn spring-boot:run -Pdev
+
+# Producción
+mvn spring-boot:run -Pprod
 ```
-/home/testuser/upload/origin/documents/report.pdf
+
+## 🚀 Compilación y Ejecución
+
+### 1. Compilar el Proyecto
+```bash
+mvn clean package
 ```
 
-**Cálculo:**
-1. Input: `"/home/testuser/upload/origin/documents/report.pdf" + "report.pdf"`
-2. SHA-256: `a1b2c3d4e5f6...` (64 caracteres hex)
-3. Particionado: Tomar 2 caracteres × 3 niveles = `a1/b2/c3`
-4. Path destino: `/data/reorganized/a1/b2/c3/report.pdf`
+### 2. Ejecutar la Aplicación
+```bash
+# Modo desarrollo
+java -jar target/dvsmart_reorganization_api.jar
 
-**Resultado:**
-```
-/data/reorganized/
-├── a1/
-│   └── b2/
-│       └── c3/
-│           └── report.pdf
-├── d4/
-│   └── e5/
-│       └── f6/
-│           └── invoice.pdf
-└── ...
+# Modo producción con propiedades
+java -jar target/dvsmart_reorganization_api.jar \
+  --spring.profiles.active=prod \
+  --sftp.origin.host=sftp.miservidor.com \
+  --sftp.dest.host=sftp.destino.com
+
+# Con Maven
+mvn spring-boot:run
 ```
 
-### Ventajas
-
-- **Distribución uniforme**: Cada directorio tiene ~256 subdirectorios (16²)
-- **Escalabilidad**: Soporta millones de archivos sin degradación
-- **Performance**: Búsquedas rápidas en filesystems con índices de directorios
-- **Determinismo**: El mismo archivo siempre va al mismo path
-
----
-
-## 🔧 Troubleshooting
-
-### Error: "Job not found in registry: BATCH-REORG-FULL"
-
-**Causa**: El `JobRegistry` no encuentra el job.
-
-**Solución**: Verificar que existe el bean `jobRegistry()` en `BatchReorgFullConfig`:
-```java
-@Bean
-public JobRegistry jobRegistry() {
-    return new MapJobRegistry();
+### 3. Verificar Estado
+```bash
+curl http://localhost:8080/actuator/health
+```
+Respuesta esperada:
+```json
+{
+  "status": "UP",
+  "components": {
+    "mongo": {"status": "UP"},
+    "diskSpace": {"status": "UP"}
+  }
 }
 ```
 
----
+## 📊 Endpoints API
 
-### Error: "Failed to read file from origin SFTP: Permission denied"
+### 1. Iniciar Reorganización Completa
+```http
+POST /api/batch/reorganize/full
+Accept: application/json
 
-**Causa**: El usuario SFTP no tiene permisos de lectura.
-
-**Solución**:
-1. Verificar credenciales en `application.properties`
-2. Verificar permisos del archivo en SFTP origen:
-   ```bash
-   sftp -P 2222 testuser@localhost
-   ls -la /upload/origin/dir1/
-   ```
-
----
-
-### Error: "Failed to transfer file to destination SFTP: Connection timeout"
-
-**Causa**: Timeout de conexión SFTP.
-
-**Solución**:
-1. Aumentar timeout en configuración:
-   ```properties
-   sftp.dest.timeout=60000
-   ```
-2. Verificar conectividad de red
-3. Verificar firewall/security groups
-
----
-
-### Error: "Duplicate key error collection: organized-files-index"
-
-**Causa**: Intento de procesar el mismo archivo dos veces.
-
-**Solución**: Este es un comportamiento esperado. El sistema evita reprocesar archivos. Si necesitas reprocesar:
-```javascript
-// Eliminar registro de auditoría
-db.organized-files-index.deleteOne({ idUnico: "file1-unique-id" })
+Response 202 (Accepted):
+{
+  "message": "Batch job started successfully",
+  "jobExecutionId": 12345,
+  "status": "ACCEPTED"
+}
 ```
 
----
+### 2. Monitoreo con Spring Actuator
+```bash
+# Health Check
+GET /actuator/health
 
-### Performance: Procesamiento muy lento
+# Información aplicación
+GET /actuator/info
 
-**Diagnóstico**:
-```javascript
-// Ver archivos procesados por minuto
-db.organized-files-index.aggregate([
-    {
-        $group: {
-            _id: {
-                $dateToString: {
-                    format: "%Y-%m-%d %H:%M",
-                    date: "$processedAt"
-                }
-            },
-            count: { $sum: 1 }
-        }
-    },
-    { $sort: { _id: -1 } },
-    { $limit: 10 }
-])
+# Métricas (rendimiento, memoria, batch)
+GET /actuator/metrics
+
+# Jobs Spring Batch
+GET /actuator/batch/jobs
+GET /actuator/batch/jobs/{jobId}/executions
 ```
 
-**Soluciones**:
-1. Aumentar `thread-pool-size`:
-   ```properties
-   batch.thread-pool-size=30
-   ```
-2. Aumentar `chunk-size`:
-   ```properties
-   batch.chunk-size=200
-   ```
-3. Aumentar pool de conexiones SFTP:
-   ```properties
-   sftp.origin.pool.size=20
-   sftp.dest.pool.size=20
-   ```
+### 3. Consultar Estado de Job
+```bash
+# Verificar job específico
+GET /actuator/batch/jobs/BATCH-REORG-FULL/executions
+```
 
----
+## 🗄️ Base de Datos MongoDB
 
-### MongoDB: Out of Memory
+### Colecciones
 
-**Causa**: Dataset muy grande sin streaming.
+#### 1. `disorganized-files-index` (Origen)
+Índice de archivos desorganizados (pre-existente).
 
-**Verificación**: El código ya usa `MongoCursorItemReader` con streaming. Si persiste:
+```javascript
+{
+  "_id": ObjectId("..."),
+  "idUnico": "sha256_hash_unique",
+  "rutaOrigen": "/data/legacy/files/subdir/document.pdf",
+  "nombre": "document.pdf",
+  "mtime": ISODate("2025-12-15T10:30:00Z"),
+  "tamanio": NumberLong(2048576),
+  "extension": "pdf",
+  "indexadoEn": ISODate("2025-12-15T11:00:00Z")
+}
+```
 
+#### 2. `organized-files-index` (Destino/Auditoría)
+Registro de archivos transferidos y organizados.
+
+```javascript
+{
+  "_id": ObjectId("..."),
+  "idUnico": "sha256_hash_unique",
+  "rutaOrigen": "/data/legacy/files/document.pdf",
+  "rutaDestino": "/data/reorganized/a1/b2/c3/document.pdf",
+  "nombre": "document.pdf",
+  "status": "SUCCESS",  // o "FAILED"
+  "processedAt": ISODate("2025-12-17T14:25:30Z"),
+  "errorMessage": null  // Solo si FAILED
+}
+```
+
+### Índices Recomendados
+```javascript
+// Índice para búsquedas por estado
+db.getCollection('organized-files-index').createIndex({ 
+  "status": 1, 
+  "processedAt": -1 
+})
+
+// Índice para estadísticas
+db.getCollection('organized-files-index').createIndex({ 
+  "rutaDestino": 1 
+})
+```
+
+## ⚡ Rendimiento y Optimización
+
+### Parámetros Ajustables
+
+| Parámetro | Valor Default | Rango Recomendado | Impacto |
+|-----------|--------------|-------------------|---------|
+| `batch.chunk-size` | 100 | 50-500 | Memoria vs Throughput |
+| `batch.thread-pool-size` | 20 | CPU cores × 2-4 | Paralelismo |
+| `sftp.origin.pool.size` | 10 | 10-50 | Lectura simultánea |
+| `sftp.dest.pool.size` | 10 | 10-50 | Escritura simultánea |
+| `batch.queue-capacity` | 1000 | 1000-10000 | Buffer picos |
+
+### Estimación de Rendimiento
+| Escenario | Throughput Estimado | Factores Limitantes |
+|-----------|---------------------|---------------------|
+| Archivos pequeños (<1MB) | 500-2000 files/sec | Red, I/O Disco SFTP |
+| Archivos medianos (1-10MB) | 100-500 files/sec | Ancho de banda red |
+| Archivos grandes (>10MB) | 10-50 files/sec | Latencia red |
+
+### Monitoreo durante Ejecución
+```bash
+# Ver logs en tiempo real
+tail -f logs/reorganization.log | grep -E "(Successfully transferred|Failed to process)"
+
+# Métricas de batch
+curl -s http://localhost:8080/actuator/metrics/spring.batch.job | jq .
+
+# Uso memoria
+curl -s http://localhost:8080/actuator/metrics/jvm.memory.used | jq .
+```
+
+## 🔧 Mantenimiento y Operación
+
+### Limpieza de Datos
+```javascript
+// Eliminar registros antiguos (ejemplo > 90 días)
+db.getCollection('organized-files-index').deleteMany({
+  "processedAt": { 
+    "$lt": new Date(Date.now() - 90 * 24 * 60 * 60 * 1000) 
+  },
+  "status": "SUCCESS"
+});
+
+// Mantener solo fallos recientes
+db.getCollection('organized-files-index').deleteMany({
+  "status": "FAILED",
+  "processedAt": { 
+    "$lt": new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) 
+  }
+});
+```
+
+### Backup y Recovery
+```bash
+# Backup índices organizados
+mongodump --uri="mongodb://localhost:27017/dvsmart_reorganization" \
+  --collection="organized-files-index" \
+  --gzip \
+  --out=/backup/mongodb_$(date +%Y%m%d)
+
+# Restaurar en caso necesario
+mongorestore --uri="mongodb://localhost:27017/dvsmart_reorganization" \
+  --collection="organized-files-index" \
+  --gzip \
+  /backup/mongodb_20251217/dvsmart_reorganization/organized-files-index.bson.gz
+```
+
+### Rotación de Logs
+Configuración automática en `application.properties`:
+- 10MB máximo por archivo
+- 30 archivos de historial
+- 500MB capacidad total
+
+## 🐛 Solución de Problemas
+
+### Problemas Comunes
+
+#### 1. Conexión SFTP Falla
+**Síntomas**:
+- `Connection refused` o `Timeout exceeded`
+- Errores en `SftpOriginRepositoryImpl` o `SftpDestinationRepositoryImpl`
+
+**Solución**:
 ```properties
-# Reducir batch size interno del cursor
-# (modificar en MongoIndexedFileItemReader.java)
-.batchSize(50)  // Reducir de 100 a 50
+# Aumentar timeout
+sftp.origin.timeout=60000
+sftp.dest.timeout=60000
+
+# Verificar credenciales
+sftp.origin.user=usuario_correcto
+sftp.origin.password=contraseña_correcta
+
+# Probar conexión manualmente
+sftp -P 22 usuario@host.sftp.com
 ```
 
----
+#### 2. Rendimiento Lento
+**Síntomas**:
+- Throughput < 100 archivos/segundo
+- Alta CPU en servidor
 
-## 📚 Documentación Adicional
+**Solución**:
+```properties
+# Aumentar paralelismo
+batch.thread-pool-size=40
+batch.chunk-size=50  # Reducir para menos memoria
 
-### Spring Batch
-- [Documentación oficial](https://spring.io/projects/spring-batch)
-- [Guía de referencia 6.0](https://docs.spring.io/spring-batch/docs/current/reference/html/)
-
-### Spring Integration SFTP
-- [Documentación oficial](https://docs.spring.io/spring-integration/docs/current/reference/html/sftp.html)
-
-### MongoDB
-- [Manual de MongoDB](https://docs.mongodb.com/manual/)
-- [Índices en MongoDB](https://docs.mongodb.com/manual/indexes/)
-
----
-
-## 📄 Licencia
-
-```
-Copyright (c) 2025 Indra Sistemas, S.A. All Rights Reserved.
-http://www.indracompany.com/
-
-The contents of this file are owned by Indra Sistemas, S.A. copyright holder.
-This file can only be copied, distributed and used all or in part with the
-written permission of Indra Sistemas, S.A, or in accordance with the terms and
-conditions laid down in the agreement / contract under which supplied.
+# Aumentar conexiones SFTP
+sftp.origin.pool.size=20
+sftp.dest.pool.size=20
 ```
 
+#### 3. MongoDB Saturado
+**Síntomas**:
+- Timeouts en operaciones
+- Alta carga CPU en MongoDB
+
+**Solución**:
+```properties
+# Reducir chunk size
+batch.chunk-size=50
+
+# Considerar índices adecuados
+# Verificar conexión directa (no pasar por balanceador)
+```
+
+### Comandos de Diagnóstico
+```bash
+# Ver jobs activos
+curl http://localhost:8080/actuator/batch/jobs
+
+# Ver métricas de ejecución
+curl http://localhost:8080/actuator/metrics/spring.batch.job | jq '.measurements'
+
+# Ver conexiones SFTP activas
+grep -i "session" logs/reorganization.log | tail -20
+
+# Monitorizar throughput
+watch -n 5 'grep "Successfully transferred" logs/reorganization.log | wc -l'
+```
+
+## 🧪 Pruebas
+
+### Pruebas Unitarias
+```bash
+# Ejecutar todas las pruebas
+mvn test
+
+# Ejecutar pruebas específicas
+mvn test -Dtest=FileReorganizationServiceTest
+```
+
+### Pruebas de Integración
+1. Configurar entorno de prueba:
+   - MongoDB local en puerto 27017
+   - Servidores SFTP de prueba (puede usar testcontainers)
+
+2. Ejecutar con datos de prueba:
+```bash
+# Usar directorio pequeño para pruebas
+sftp.origin.base-dir=/test/small_dataset
+sftp.dest.base-dir=/test/reorganized_output
+
+# Ejecutar reorganización limitada
+mvn spring-boot:run -Dtest.mode=true
+```
+
+### Validación de Resultados
+```javascript
+// Verificar integridad después de ejecución
+db.getCollection('disorganized-files-index').countDocuments();
+db.getCollection('organized-files-index').countDocuments({ status: "SUCCESS" });
+
+// Verificar que todos los archivos origen tienen su contraparte destino
+db.getCollection('disorganized-files-index').aggregate([
+  {
+    $lookup: {
+      from: "organized-files-index",
+      localField: "idUnico",
+      foreignField: "idUnico",
+      as: "organized"
+    }
+  },
+  {
+    $match: {
+      organized: { $size: 0 }
+    }
+  },
+  { $count: "missing_files" }
+]);
+```
+
+## 🚢 Despliegue en Producción
+
+### Requisitos Hardware
+| Componente | Mínimo | Recomendado |
+|------------|--------|-------------|
+| CPU | 4 cores | 8+ cores |
+| RAM | 8GB | 16-32GB |
+| Disco | 50GB | 200GB+ |
+| Red | 100Mbps | 1Gbps+ |
+
+### Configuración Producción
+```properties
+# application-prod.properties
+spring.profiles.active=prod
+
+# MongoDB Cluster
+spring.mongodb.uri=mongodb://user:pass@mongodb1:27017,mongodb2:27017/dvsmart_reorganization?replicaSet=rs0
+
+# SFTP con conexiones seguras
+sftp.origin.host=prod-sftp-origin.company.com
+sftp.dest.host=prod-sftp-dest.company.com
+
+# Optimización producción
+batch.thread-pool-size=40
+sftp.origin.pool.size=30
+sftp.dest.pool.size=30
+batch.queue-capacity=5000
+
+# Logging producción
+logging.level.root=WARN
+logging.level.com.indra.minsait.dvsmart.reorganization=INFO
+```
+
+### Consideraciones de Seguridad
+1. **Credenciales**: Usar Vault o Secrets Manager
+2. **Conexiones**: SFTP sobre VPN o conexiones privadas
+3. **Firewall**: Restringir puertos necesarios (8080, 27017)
+4. **SSL/TLS**: Para MongoDB y SFTP si es posible
+5. **Auditoría**: Mantener logs de todas las operaciones
+
+## 🔄 CI/CD (Opcional)
+
+### Pipeline Ejemplo (.gitlab-ci.yml)
+```yaml
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  MAVEN_OPTS: "-Dmaven.repo.local=.m2/repository"
+
+build:
+  stage: build
+  image: maven:3.8.4-openjdk-21
+  script:
+    - mvn clean compile
+  artifacts:
+    paths:
+      - target/
+
+test:
+  stage: test
+  image: maven:3.8.4-openjdk-21
+  services:
+    - mongo:4.4
+  script:
+    - mvn test
+
+deploy-prod:
+  stage: deploy
+  image: alpine:latest
+  script:
+    - apk add --no-cache openssh-client
+    - scp target/dvsmart_reorganization_api.jar user@prod-server:/opt/app/
+    - ssh user@prod-server "systemctl restart reorganization-api"
+  only:
+    - master
+```
+
+## 📝 Licencia y Copyright
+
+Todos los archivos `.java` incluyen automáticamente headers de copyright usando `license-maven-plugin`.
+
+Para aplicar/actualizar headers:
+```bash
+mvn license:format
+```
+
+Archivo de configuración: `src/main/resources/license-header.txt`
+
+## 🔮 Roadmap y Mejoras Futuras
+
+### Próximas Versiones
+1. **Reorganización Parcial**: Solo archivos modificados desde última ejecución
+2. **Dashboard Web**: Interfaz gráfica para monitoreo en tiempo real
+3. **Multi-origen**: Soporte para múltiples servidores SFTP origen
+4. **Validación Post-transferencia**: Checksum comparativo
+5. **Estimación Tiempo**: Cálculo dinámico de tiempo restante
+6. **Pausa/Reanudación**: Control granular de ejecución
+7. **Exportación Reportes**: CSV/PDF de estadísticas
+
+### Optimizaciones Planeadas
+- Compresión durante transferencia para archivos grandes
+- Cache local de directorios ya creados en SFTP destino
+- Balanceo dinámico de threads según throughput
+- Reintentos inteligentes con backoff exponencial
+
+## 📚 Recursos y Referencias
+
+- [Spring Batch Documentation](https://docs.spring.io/spring-batch/reference/)
+- [Spring Integration SFTP](https://docs.spring.io/spring-integration/reference/sftp.html)
+- [MongoDB Java Driver](https://mongodb.github.io/mongo-java-driver/)
+- [SSHJ Library](https://github.com/hierynomus/sshj)
+- [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/)
+
+## 🤝 Soporte y Contacto
+
+**Equipo de Mantenimiento**: DvSmart Reorganization Team  
+**Contacto**: hahuaranga@indracompany.com  
+**Repositorio**: [Enlace interno al repositorio]  
+**Documentación Técnica**: [Enlace a documentación detallada]
+
+### Reporte de Issues
+Al encontrar un problema, incluir:
+1. Versión de la aplicación
+2. Configuración relevante (sin credenciales)
+3. Logs de error completos
+4. Pasos para reproducir
+5. Impacto en producción
+
 ---
-
-## 👥 Contacto
-
-**Autor**: hahuaranga@indracompany.com  
-**Fecha Creación**: 11-12-2025  
-**Versión**: 1.0.1-SNAPSHOT
+**Última Actualización**: Diciembre 2025  
+**Versión Actual**: 1.0.1-SNAPSHOT  
+**Estado**: Activo en Desarrollo
