@@ -186,7 +186,7 @@ public class BatchReorgFullConfig {
     @Bean(name = "batchReorgFullJob")
     Job batchReorgFullJob() {
         return new JobBuilder("BATCH-REORG-FULL", jobRepository)
-                .incrementer(new RunIdIncrementer())
+                //.incrementer(new RunIdIncrementer())
                 .start(reorganizeStep())
                 .build();
     }
