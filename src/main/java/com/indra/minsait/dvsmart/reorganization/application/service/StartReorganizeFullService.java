@@ -44,12 +44,14 @@ public class StartReorganizeFullService implements StartReorganizeFullUseCase {
             // ✅ JobParametersBuilder en lugar de Properties
             JobParameters jobParameters = new JobParametersBuilder()
                     .addLong("timestamp", System.currentTimeMillis())
+                    .addString("uniqueId", java.util.UUID.randomUUID().toString())
                     .toJobParameters();  
             
             // Lanzar job usando el nombre del job (definido en BatchReorgFullConfig)
             JobExecution jobExecution = jobOperator.start(batchReorgFullJob, jobParameters);
             
-            log.info("Job launched successfully. JobExecutionId: {}", jobExecution.getId());
+            log.info("Job launched successfully. JobExecutionId: {}, Status: {}", 
+                    jobExecution.getId(), jobExecution.getStatus());
             
             return jobExecution.getId();
             
