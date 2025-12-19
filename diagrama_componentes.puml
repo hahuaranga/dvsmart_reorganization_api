@@ -1,0 +1,35 @@
+@startuml
+package "Web Layer" {
+    [BatchReorganizeController] as Controller
+}
+
+package "Batch Configuration (Refactored)" {
+    [MongoIndexedDisorganizedFileItemReader] as Reader
+    [AsyncItemProcessor] as Processor
+    [SftpMoveAndIndexItemWriter] as Writer
+    [ThreadPoolTaskExecutor] as TaskExec
+}
+
+package "Application & Domain" {
+    [StartReorganizeFullService] as AppService
+    [FileReorganizationService] as DomainService
+}
+
+package "Persistence & Remote" {
+    [SftpOriginRepository] as OrigRepo
+    [SftpDestinationRepository] as DestRepo
+    [OrganizedFilesIndexRepository] as AuditRepo
+}
+
+' Flujo
+Controller --> AppService : "Start job"
+AppService --> Reader : "Reads documents"
+Reader --> Processor : "ArchivoLegacy"
+Processor --> DomainService : "Calculate Path"
+Processor ..> TaskExec : "Parallel Execution"
+Writer --> DomainService : "Path lookup"
+Writer --> OrigRepo : "Streaming read"
+Writer --> DestRepo : "Streaming write"
+Writer --> AuditRepo : "Save results"
+
+@enduml

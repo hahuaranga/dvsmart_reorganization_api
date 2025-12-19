@@ -16,6 +16,8 @@ package com.indra.minsait.dvsmart.reorganization.application.service;
 import com.indra.minsait.dvsmart.reorganization.application.port.in.StartReorganizeFullUseCase;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.JobExecution;
 import org.springframework.batch.core.job.parameters.JobParameters;
@@ -39,6 +41,11 @@ public class StartReorganizeFullService implements StartReorganizeFullUseCase {
     private final Job batchReorgFullJob;
     
     @Override
+    @SchedulerLock(
+            name = "indexing-full-job",
+            lockAtMostFor = "PT2H",    // 2 horas máximo
+            lockAtLeastFor = "PT30M"   // 30 minutos mínimo
+        )    
     public Long execute() {
         try {
             // ✅ JobParametersBuilder en lugar de Properties

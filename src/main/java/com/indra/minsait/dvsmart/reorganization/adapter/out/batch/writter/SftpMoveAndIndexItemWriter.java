@@ -39,25 +39,25 @@ import java.util.List;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class SftpMoveAndAuditItemWriter implements ItemWriter<ArchivoLegacy> {
+public class SftpMoveAndIndexItemWriter implements ItemWriter<ArchivoLegacy> {
 
     private final SftpOriginRepository originRepo;
     private final SftpDestinationRepository destRepo;
-    private final OrganizedFilesIndexRepository auditRepo;
+    private final OrganizedFilesIndexRepository indexingRepo;
     private final FileReorganizationService reorganizationService;
     private final SftpConfigProperties props;
 
     @Override
     public void write(Chunk<? extends ArchivoLegacy> chunk) {
-        List<ProcessedArchivo> auditRecords = new ArrayList<>();
+        List<ProcessedArchivo> indexingRecords = new ArrayList<>();
         
         for (ArchivoLegacy archivo : chunk) {
             ProcessedArchivo audit = processFile(archivo);
-            auditRecords.add(audit);
+            indexingRecords.add(audit);
         }
         
-        if (!auditRecords.isEmpty()) {
-            auditRepo.saveAll(auditRecords);
+        if (!indexingRecords.isEmpty()) {
+            indexingRepo.saveAll(indexingRecords);
         }
     }
 

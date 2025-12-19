@@ -1,0 +1,44 @@
+@startuml
+actor "Administrador" as User
+participant "BatchReorganizeController" as CTRL
+participant "StartReorganizeFullService" as SVC
+participant "Spring Batch Engine" as BATCH
+participant "SftpMoveAndIndexItemWriter" as WRITER
+participant "SftpOriginRepositoryImpl" as ORIG
+participant "SftpDestinationRepositoryImpl" as DEST
+database "MongoDB" as DB
+
+User -> CTRL : POST /api/batch/reorganize/full
+activate CTRL
+CTRL -> SVC : execute()
+SVC -> BATCH : launch("BATCH-REORG-FULL")
+CTRL <-- SVC : jobExecutionId
+User <-- CTRL : 202 ACCEPTED (jobExecutionId)
+deactivate CTRL
+
+== Procesamiento por Chunks (Asíncrono) ==
+BATCH -> WRITER : write(Chunk<ArchivoLegacy>)
+activate WRITER
+loop para cada archivo en el chunk
+    WRITER -> ORIG : readFile(rutaOrigen)
+    activate ORIG
+    ORIG -> ORIG : session.readRaw(path)
+    ORIG --> WRITER : InputStream (Streaming)
+    deactivate ORIG
+    
+    WRITER -> DEST : transferTo(rutaDestino, InputStream)
+    activate DEST
+    DEST -> DEST : createParentDirectories()
+    DEST -> DEST : session.write(InputStream, path)
+    DEST --> WRITER : Success
+    deactivate DEST
+end
+
+WRITER -> DB : saveAll(indexingRecords)
+activate DB
+DB --> WRITER : OK
+deactivate DB
+
+BATCH <-- WRITER : Completion
+deactivate WRITER
+@enduml

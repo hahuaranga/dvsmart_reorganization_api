@@ -1,0 +1,59 @@
+@startuml
+skinparam componentStyle uml2
+skinparam packageStyle rectangle
+
+package "Infraestructura (Adaptadores Externos)" {
+    [Spring Batch Job] as BATCH
+    database "MongoDB" as DB
+    cloud "SFTP Servers (Mina SSHD)" as SFTP
+}
+
+package "Adaptadores de Entrada/Salida" {
+    package "Inbound Adapters" {
+        [BatchReorganizeController] as CTRL
+    }
+    
+    package "Outbound Adapters" {
+        [SftpMoveAndIndexItemWriter] as WRITER
+        [SftpOriginRepositoryImpl] as SFTP_ORIG
+        [SftpDestinationRepositoryImpl] as SFTP_DEST
+        [OrganizedFilesIndexRepositoryImpl] as MONGO_REPO
+    }
+}
+
+package "Núcleo de la Aplicación" {
+    interface "StartReorganizeFullUseCase" as PORT_IN
+    [StartReorganizeFullService] as APP_SERVICE
+    
+    package "Puertos de Salida" {
+        interface "SftpOriginRepository" as P_ORIG
+        interface "SftpDestinationRepository" as P_DEST
+        interface "OrganizedFilesIndexRepository" as P_REPO
+    }
+}
+
+package "Dominio" {
+    [FileReorganizationService] as DOM_SERVICE
+    entity "ArchivoLegacy" as ENT_LEGACY
+    entity "ProcessedArchivo" as ENT_PROCESSED
+}
+
+' Relaciones
+CTRL --> PORT_IN
+APP_SERVICE .up.|> PORT_IN
+APP_SERVICE --> BATCH : "Inicia Job"
+
+WRITER --> DOM_SERVICE : "Calcula Rutas"
+WRITER --> P_ORIG
+WRITER --> P_DEST
+WRITER --> P_REPO
+
+SFTP_ORIG .up.|> P_ORIG
+SFTP_DEST .up.|> P_DEST
+MONGO_REPO .up.|> P_REPO
+
+SFTP_ORIG --> SFTP
+SFTP_DEST --> SFTP
+MONGO_REPO --> DB
+
+@enduml

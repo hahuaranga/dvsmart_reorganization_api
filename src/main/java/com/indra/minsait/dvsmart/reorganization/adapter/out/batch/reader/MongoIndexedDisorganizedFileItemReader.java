@@ -38,7 +38,7 @@ import java.util.Map;
  */
 @Component
 @RequiredArgsConstructor
-public class MongoIndexedFileItemReader {
+public class MongoIndexedDisorganizedFileItemReader {
 
     private final MongoTemplate mongoTemplate;
     

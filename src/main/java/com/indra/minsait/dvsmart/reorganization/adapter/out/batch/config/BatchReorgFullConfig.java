@@ -13,8 +13,8 @@
  */
 package com.indra.minsait.dvsmart.reorganization.adapter.out.batch.config;
 
-import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.reader.MongoIndexedFileItemReader;
-import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.writter.SftpMoveAndAuditItemWriter;
+import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.reader.MongoIndexedDisorganizedFileItemReader;
+import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.writter.SftpMoveAndIndexItemWriter;
 import com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity.DisorganizedFilesIndexDocument;
 import com.indra.minsait.dvsmart.reorganization.domain.model.ArchivoLegacy;
 import com.indra.minsait.dvsmart.reorganization.domain.service.FileReorganizationService;
@@ -26,7 +26,6 @@ import org.springframework.batch.core.configuration.JobRegistry;
 import org.springframework.batch.core.configuration.support.MapJobRegistry;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.builder.JobBuilder;
-import org.springframework.batch.core.job.parameters.RunIdIncrementer;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.Step;
 import org.springframework.batch.core.step.builder.StepBuilder;
@@ -54,8 +53,8 @@ import java.util.concurrent.Future;
 public class BatchReorgFullConfig {
 
     private final JobRepository jobRepository;
-    private final MongoIndexedFileItemReader mongoReader;
-    private final SftpMoveAndAuditItemWriter sftpWriter;
+    private final MongoIndexedDisorganizedFileItemReader mongoReader;
+    private final SftpMoveAndIndexItemWriter sftpWriter;
     private final FileReorganizationService reorganizationService;
     private final SftpConfigProperties sftpProps;
     private final BatchConfigProperties batchProps;
