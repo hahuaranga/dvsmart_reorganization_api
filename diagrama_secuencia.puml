@@ -1,44 +1,42 @@
 @startuml
-actor "Administrador" as User
-participant "BatchReorganizeController" as CTRL
+actor "Admin" as User
+participant "Controller" as CTRL
+participant "ShedLock" as LOCK
 participant "StartReorganizeFullService" as SVC
-participant "Spring Batch Engine" as BATCH
+participant "Spring Batch" as BATCH
 participant "SftpMoveAndIndexItemWriter" as WRITER
-participant "SftpOriginRepositoryImpl" as ORIG
-participant "SftpDestinationRepositoryImpl" as DEST
+participant "SFTP Session Pool" as POOL
+participant "SFTP Server" as SFTP
 database "MongoDB" as DB
 
-User -> CTRL : POST /api/batch/reorganize/full
-activate CTRL
+User -> CTRL : POST /reorganize/full
 CTRL -> SVC : execute()
-SVC -> BATCH : launch("BATCH-REORG-FULL")
-CTRL <-- SVC : jobExecutionId
-User <-- CTRL : 202 ACCEPTED (jobExecutionId)
-deactivate CTRL
+activate SVC
 
-== Procesamiento por Chunks (Asíncrono) ==
-BATCH -> WRITER : write(Chunk<ArchivoLegacy>)
-activate WRITER
-loop para cada archivo en el chunk
-    WRITER -> ORIG : readFile(rutaOrigen)
-    activate ORIG
-    ORIG -> ORIG : session.readRaw(path)
-    ORIG --> WRITER : InputStream (Streaming)
-    deactivate ORIG
+SVC -> LOCK : tryLock("reorg_job")
+alt Lock ya existe
+    SVC <-- LOCK : fail
+    CTRL <-- SVC : 409 Conflict / Error
+else Lock adquirido
+    SVC -> BATCH : launchJob()
+    CTRL <-- SVC : 202 Accepted (JobId)
     
-    WRITER -> DEST : transferTo(rutaDestino, InputStream)
-    activate DEST
-    DEST -> DEST : createParentDirectories()
-    DEST -> DEST : session.write(InputStream, path)
-    DEST --> WRITER : Success
-    deactivate DEST
+    == Ejecución Batch (Async) ==
+    BATCH -> WRITER : write(chunk)
+    activate WRITER
+    
+    loop por cada archivo
+        WRITER -> POOL : getSession()
+        POOL -> SFTP : connect (lazy)
+        WRITER -> SFTP : readStream()
+        WRITER -> SFTP : writeStream()
+        WRITER -> POOL : releaseSession()
+    end
+    
+    WRITER -> DB : saveAudit()
+    deactivate WRITER
+    
+    BATCH -> LOCK : releaseLock()
 end
-
-WRITER -> DB : saveAll(indexingRecords)
-activate DB
-DB --> WRITER : OK
-deactivate DB
-
-BATCH <-- WRITER : Completion
-deactivate WRITER
+deactivate SVC
 @enduml

@@ -29,6 +29,8 @@ ARCHIVO: ./pom.xml
 		<!-- Other dependencies -->
 		<lombok.version>1.18.30</lombok.version>
 		<sshj.version>0.38.0</sshj.version>
+		<!-- ✅ ShedLock para bloqueo distribuido -->
+		<shedlock.version>5.10.2</shedlock.version>		
 	</properties>
 
 	<dependencies>
@@ -123,6 +125,21 @@ ARCHIVO: ./pom.xml
 			<artifactId>spring-integration-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		
+		<!-- ✅ ShedLock Core -->
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-spring</artifactId>
+			<version>${shedlock.version}</version>
+		</dependency>
+
+		<!-- ✅ ShedLock MongoDB Provider -->
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-provider-mongo</artifactId>
+			<version>${shedlock.version}</version>
+		</dependency>
+				
 	</dependencies>
 
 	<build>
@@ -1282,6 +1299,8 @@ package com.indra.minsait.dvsmart.reorganization.application.service;
 import com.indra.minsait.dvsmart.reorganization.application.port.in.StartReorganizeFullUseCase;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.JobExecution;
 import org.springframework.batch.core.job.parameters.JobParameters;
@@ -1305,6 +1324,11 @@ public class StartReorganizeFullService implements StartReorganizeFullUseCase {
     private final Job batchReorgFullJob;
     
     @Override
+    @SchedulerLock(
+            name = "indexing-full-job",
+            lockAtMostFor = "PT2H",    // 2 horas máximo
+            lockAtLeastFor = "PT30M"   // 30 minutos mínimo
+        )    
     public Long execute() {
         try {
             // ✅ JobParametersBuilder en lugar de Properties
@@ -1626,6 +1650,83 @@ public class SftpConfigProperties {
 }
 -e /n/n
 ════════════════════════════════════════════════
+ARCHIVO: ./src/main/java/com/indra/minsait/dvsmart/reorganization/infrastructure/config/ShedLockConfig.java
+════════════════════════════════════════════════
+/*
+ * /////////////////////////////////////////////////////////////////////////////
+ *
+ * Copyright (c) 2025 Indra Sistemas, S.A. All Rights Reserved.
+ * http://www.indracompany.com/
+ *
+ * The contents of this file are owned by Indra Sistemas, S.A. copyright holder.
+ * This file can only be copied, distributed and used all or in part with the
+ * written permission of Indra Sistemas, S.A, or in accordance with the terms and
+ * conditions laid down in the agreement / contract under which supplied.
+ *
+ * /////////////////////////////////////////////////////////////////////////////
+ */
+package com.indra.minsait.dvsmart.reorganization.infrastructure.config;
+
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.core.LockProvider;
+import net.javacrumbs.shedlock.provider.mongo.MongoLockProvider;
+import net.javacrumbs.shedlock.spring.annotation.EnableSchedulerLock;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.scheduling.annotation.EnableScheduling;
+
+/**
+ * Author: hahuaranga@indracompany.com
+ * Created on: 17-12-2025 at 23:34:40
+ * File: ShedLockConfig.java
+ */
+
+/**
+ * Configuración de ShedLock para coordinación distribuida.
+ * 
+ * Propósito:
+ * - Evitar ejecuciones concurrentes del mismo job
+ * - Coordinar entre dvsmart_indexing_api y dvsmart_reorganization_api
+ * - Prevenir saturación del servidor SFTP origen
+ * 
+ * Funcionamiento:
+ * - Usa MongoDB como backend de locks
+ * - Lock automático al ejecutar métodos anotados con @SchedulerLock
+ * - Si otro proceso tiene el lock, espera o falla según configuración
+ */
+@Slf4j
+@Configuration
+@EnableScheduling
+@EnableSchedulerLock(defaultLockAtMostFor = "PT2H", defaultLockAtLeastFor = "PT30M")
+@RequiredArgsConstructor
+public class ShedLockConfig {
+
+	private final MongoTemplate mongoTemplate;
+	
+    /**
+     * Provider de locks usando MongoDB.
+     * 
+     * Comparte la misma colección con dvsmart_reorganization_api
+     * para coordinación efectiva.
+     */
+    @Bean
+    LockProvider lockProvider() {
+        
+        log.info("Configuring ShedLock with MongoDB provider");
+        
+        // Usar colección específica para locks
+        // IMPORTANTE: Debe ser la misma que use dvsmart_reorganization_api
+        LockProvider provider = new MongoLockProvider(mongoTemplate.getDb()
+        );
+        
+        log.info("ShedLock provider configured successfully");
+        
+        return provider;
+    }
+}-e /n/n
+════════════════════════════════════════════════
 ARCHIVO: ./src/main/java/com/indra/minsait/dvsmart/reorganization/infrastructure/exception/GlobalExceptionHandler.java
 ════════════════════════════════════════════════
 /*
@@ -1702,8 +1803,67 @@ public class GlobalExceptionHandler {
                     "message", "An unexpected error occurred"
                 ));
     }
+    
+    /**
+     * Maneja el caso cuando se intenta ejecutar un job que ya está corriendo.
+     * Retorna HTTP 409 CONFLICT con mensaje descriptivo.
+     */
+    @ExceptionHandler(JobAlreadyRunningException.class)
+    public ResponseEntity<Map<String, Object>> handleJobAlreadyRunning(JobAlreadyRunningException ex) {
+        log.warn("Job execution conflict: {}", ex.getMessage());
+        
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(Map.of(
+                    "timestamp", Instant.now().toString(),
+                    "status", HttpStatus.CONFLICT.value(),
+                    "error", "Conflict",
+                    "message", ex.getMessage(),
+                    "detail", "Please wait for the current job to complete before starting a new one"
+                ));
+    }      
 }
 -e /n/n
+════════════════════════════════════════════════
+ARCHIVO: ./src/main/java/com/indra/minsait/dvsmart/reorganization/infrastructure/exception/JobAlreadyRunningException.java
+════════════════════════════════════════════════
+/*
+ * /////////////////////////////////////////////////////////////////////////////
+ *
+ * Copyright (c) 2025 Indra Sistemas, S.A. All Rights Reserved.
+ * http://www.indracompany.com/
+ *
+ * The contents of this file are owned by Indra Sistemas, S.A. copyright holder.
+ * This file can only be copied, distributed and used all or in part with the
+ * written permission of Indra Sistemas, S.A, or in accordance with the terms and
+ * conditions laid down in the agreement / contract under which supplied.
+ *
+ * /////////////////////////////////////////////////////////////////////////////
+ */
+package com.indra.minsait.dvsmart.reorganization.infrastructure.exception;
+
+/**
+ * Author: hahuaranga@indracompany.com
+ * Created on: 17-12-2025 at 22:18:46
+ * File: JobAlreadyRunningException.java
+ */
+
+/**
+ * Excepción lanzada cuando se intenta ejecutar un job que ya está en ejecución.
+ * El GlobalExceptionHandler la mapea a HTTP 409 CONFLICT.
+ */
+public class JobAlreadyRunningException extends RuntimeException {
+    
+	private static final long serialVersionUID = 1L;
+
+	public JobAlreadyRunningException(String message) {
+        super(message);
+    }
+    
+    public JobAlreadyRunningException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}-e /n/n
 ════════════════════════════════════════════════
 ARCHIVO: ./src/main/java/com/indra/minsait/dvsmart/reorganization/infrastructure/sftp/SftpSessionFactoryConfig.java
 ════════════════════════════════════════════════
@@ -1924,14 +2084,8 @@ logging.level.org.springframework.data.mongodb=INFO
 # Patron de log para consola
 logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n
 
-# Patron de log para archivo
-logging.pattern.file=%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n
-
-# Configuracion de archivo de log
-logging.file.name=logs/reorganization.log
-logging.file.max-size=10MB
-logging.file.max-history=30
-logging.file.total-size-cap=500MB
+# Logging especifico para ShedLock
+logging.level.net.javacrumbs.shedlock=DEBUG
 
 # ============================================================================
 # ACTUATOR CONFIGURATION (Monitoring & Health)
@@ -2048,14 +2202,8 @@ logging.level.org.springframework.data.mongodb=INFO
 # Patron de log para consola
 logging.pattern.console=%d{yyyy-MM-dd HH:mm:ss} - %logger{36} - %msg%n
 
-# Patron de log para archivo
-logging.pattern.file=%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n
-
-# Configuracion de archivo de log
-logging.file.name=logs/reorganization.log
-logging.file.max-size=10MB
-logging.file.max-history=30
-logging.file.total-size-cap=500MB
+# Logging especifico para ShedLock
+logging.level.net.javacrumbs.shedlock=DEBUG
 
 # ============================================================================
 # ACTUATOR CONFIGURATION (Monitoring & Health)
@@ -2074,7 +2222,7 @@ management.metrics.enable.system=true-e /n/n
 ARCHIVO: ./target/classes/META-INF/maven/com.indra.minsait.dvsmart.reorganization/dvsmart_reorganization_api/pom.properties
 ════════════════════════════════════════════════
 #Generated by Maven Integration for Eclipse
-#Fri Dec 19 19:16:16 CLST 2025
+#Sat Dec 20 09:20:36 CLST 2025
 artifactId=dvsmart_reorganization_api
 groupId=com.indra.minsait.dvsmart.reorganization
 m2e.projectLocation=D\:\\WORKSPACES\\workspace_eclipse_new_latest\\dvsmart_reorganization_api
@@ -2112,6 +2260,8 @@ ARCHIVO: ./target/classes/META-INF/maven/com.indra.minsait.dvsmart.reorganizatio
 		<!-- Other dependencies -->
 		<lombok.version>1.18.30</lombok.version>
 		<sshj.version>0.38.0</sshj.version>
+		<!-- ✅ ShedLock para bloqueo distribuido -->
+		<shedlock.version>5.10.2</shedlock.version>		
 	</properties>
 
 	<dependencies>
@@ -2206,6 +2356,21 @@ ARCHIVO: ./target/classes/META-INF/maven/com.indra.minsait.dvsmart.reorganizatio
 			<artifactId>spring-integration-test</artifactId>
 			<scope>test</scope>
 		</dependency>
+		
+		<!-- ✅ ShedLock Core -->
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-spring</artifactId>
+			<version>${shedlock.version}</version>
+		</dependency>
+
+		<!-- ✅ ShedLock MongoDB Provider -->
+		<dependency>
+			<groupId>net.javacrumbs.shedlock</groupId>
+			<artifactId>shedlock-provider-mongo</artifactId>
+			<version>${shedlock.version}</version>
+		</dependency>
+				
 	</dependencies>
 
 	<build>

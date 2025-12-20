@@ -22,12 +22,15 @@ import com.indra.minsait.dvsmart.reorganization.infrastructure.config.BatchConfi
 import com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.configuration.JobRegistry;
 import org.springframework.batch.core.configuration.support.MapJobRegistry;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.builder.JobBuilder;
+import org.springframework.batch.core.listener.StepExecutionListener;
 import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.Step;
+import org.springframework.batch.core.step.StepExecution;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.infrastructure.item.ItemProcessor;
 import org.springframework.batch.infrastructure.item.data.MongoCursorItemReader;
@@ -38,6 +41,9 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.task.TaskExecutor;
 import org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor;
+import java.io.IOException;
+import java.net.SocketException;
+import java.net.SocketTimeoutException;
 import java.util.Arrays;
 import java.util.concurrent.Future;
 
@@ -175,6 +181,31 @@ public class BatchReorgFullConfig {
                 .reader(archivoIndexReader())
                 .processor(asyncProcessor())
                 .writer(asyncWriter())
+                
+                // ✅ 1. Activar tolerancia a fallos
+                .faultTolerant()
+                
+                // ✅ 2. Skip de excepciones específicas
+                .skip(IOException.class)
+                .skip(SocketTimeoutException.class)
+                .skipLimit(100)
+                
+                // ✅ 3. Retry policy (SIN backOffPolicy - no existe ese método)
+                .retry(SocketTimeoutException.class)
+                .retry(SocketException.class)
+                .retryLimit(3)
+                
+                // ✅ 4. Listener correcto (ExitStatus, no void)
+                .listener(new StepExecutionListener() {
+                    @Override
+                    public ExitStatus afterStep(StepExecution stepExecution) {
+                        log.warn("Step finished - Skipped: {}, Read: {}, Written: {}", 
+                            stepExecution.getSkipCount(),
+                            stepExecution.getReadCount(),
+                            stepExecution.getWriteCount());
+                        return stepExecution.getExitStatus();
+                    }
+                })            
                 .build();
     }
 

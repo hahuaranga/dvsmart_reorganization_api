@@ -1,35 +1,32 @@
 @startuml
-package "Web Layer" {
-    [BatchReorganizeController] as Controller
+package "Web Entry" {
+    [BatchReorganizeController] as Web
 }
 
-package "Batch Configuration (Refactored)" {
-    [MongoIndexedDisorganizedFileItemReader] as Reader
+package "Spring Batch & Concurrency" {
+    [LockProvider (ShedLock)] as Lock
+    [MongoIndexedFileItemReader] as Reader
     [AsyncItemProcessor] as Processor
     [SftpMoveAndIndexItemWriter] as Writer
     [ThreadPoolTaskExecutor] as TaskExec
 }
 
-package "Application & Domain" {
-    [StartReorganizeFullService] as AppService
-    [FileReorganizationService] as DomainService
+package "Service Layer" {
+    [StartReorganizeFullService] as AppSvc
+    [FileReorganizationService] as DomainSvc
 }
 
-package "Persistence & Remote" {
-    [SftpOriginRepository] as OrigRepo
-    [SftpDestinationRepository] as DestRepo
-    [OrganizedFilesIndexRepository] as AuditRepo
+package "Infrastructure Connectors" {
+    [CachingSessionFactory (SFTP Pool)] as Pool
+    [SftpRemoteFileTemplate] as Template
 }
 
-' Flujo
-Controller --> AppService : "Start job"
-AppService --> Reader : "Reads documents"
+Web --> AppSvc : "execute()"
+AppSvc ..> Lock : "Verifica Bloqueo"
+AppSvc --> Reader : "Carga items"
 Reader --> Processor : "ArchivoLegacy"
-Processor --> DomainService : "Calculate Path"
-Processor ..> TaskExec : "Parallel Execution"
-Writer --> DomainService : "Path lookup"
-Writer --> OrigRepo : "Streaming read"
-Writer --> DestRepo : "Streaming write"
-Writer --> AuditRepo : "Save results"
-
+Processor --> DomainSvc : "Calcula Rutas"
+Processor ..> TaskExec : "Paralelismo"
+Writer --> Template : "Operaciones SFTP"
+Template --> Pool : "Pide/Devuelve Sesión"
 @enduml

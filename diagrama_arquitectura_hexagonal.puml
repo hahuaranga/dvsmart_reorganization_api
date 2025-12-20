@@ -3,57 +3,63 @@ skinparam componentStyle uml2
 skinparam packageStyle rectangle
 
 package "Infraestructura (Adaptadores Externos)" {
-    [Spring Batch Job] as BATCH
-    database "MongoDB" as DB
+    database "MongoDB" as DB <<ShedLock & Data>>
     cloud "SFTP Servers (Mina SSHD)" as SFTP
+    [Spring Batch Engine] as BATCH
 }
 
-package "Adaptadores de Entrada/Salida" {
-    package "Inbound Adapters" {
+package "Adaptadores" {
+    package "Inbound (Primarios)" {
         [BatchReorganizeController] as CTRL
     }
     
-    package "Outbound Adapters" {
+    package "Outbound (Secundarios)" {
         [SftpMoveAndIndexItemWriter] as WRITER
-        [SftpOriginRepositoryImpl] as SFTP_ORIG
-        [SftpDestinationRepositoryImpl] as SFTP_DEST
-        [OrganizedFilesIndexRepositoryImpl] as MONGO_REPO
+        [SftpOriginRepositoryImpl] as SFTP_ORIG_ADAPT
+        [SftpDestinationRepositoryImpl] as SFTP_DEST_ADAPT
+        [OrganizedFilesIndexRepositoryImpl] as MONGO_REPO_ADAPT
     }
 }
 
-package "Núcleo de la Aplicación" {
-    interface "StartReorganizeFullUseCase" as PORT_IN
+package "Capa de Aplicación" {
+    interface "StartReorganizeFullUseCase" as UC_IN
     [StartReorganizeFullService] as APP_SERVICE
     
-    package "Puertos de Salida" {
+    note right of APP_SERVICE
+      Implementa @SchedulerLock
+      para evitar ejecuciones concurrentes
+    end note
+
+    package "Puertos de Salida (Interfaces)" {
         interface "SftpOriginRepository" as P_ORIG
         interface "SftpDestinationRepository" as P_DEST
         interface "OrganizedFilesIndexRepository" as P_REPO
     }
 }
 
-package "Dominio" {
+package "Capa de Dominio" {
     [FileReorganizationService] as DOM_SERVICE
     entity "ArchivoLegacy" as ENT_LEGACY
     entity "ProcessedArchivo" as ENT_PROCESSED
 }
 
 ' Relaciones
-CTRL --> PORT_IN
-APP_SERVICE .up.|> PORT_IN
-APP_SERVICE --> BATCH : "Inicia Job"
+CTRL --> UC_IN
+APP_SERVICE .up.|> UC_IN
+APP_SERVICE --> BATCH : "Dispara Job"
+APP_SERVICE -- DB : "Consulta/Crea Lock"
 
-WRITER --> DOM_SERVICE : "Calcula Rutas"
+WRITER --> DOM_SERVICE
 WRITER --> P_ORIG
 WRITER --> P_DEST
 WRITER --> P_REPO
 
-SFTP_ORIG .up.|> P_ORIG
-SFTP_DEST .up.|> P_DEST
-MONGO_REPO .up.|> P_REPO
+SFTP_ORIG_ADAPT .up.|> P_ORIG
+SFTP_DEST_ADAPT .up.|> P_DEST
+MONGO_REPO_ADAPT .up.|> P_REPO
 
-SFTP_ORIG --> SFTP
-SFTP_DEST --> SFTP
-MONGO_REPO --> DB
+SFTP_ORIG_ADAPT --> SFTP
+SFTP_DEST_ADAPT --> SFTP
+MONGO_REPO_ADAPT --> DB
 
 @enduml

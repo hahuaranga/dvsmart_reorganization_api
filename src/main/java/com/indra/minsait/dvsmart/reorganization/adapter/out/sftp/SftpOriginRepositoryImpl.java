@@ -57,8 +57,9 @@ public class SftpOriginRepositoryImpl implements SftpOriginRepository {
                     public void close() throws java.io.IOException {
                         try {
                             rawStream.close();
-                        } finally {
                             session.finalizeRaw();
+                        } finally {
+                            session.close(); // ✅ Devuelve al pool
                         }
                     }
                 };
