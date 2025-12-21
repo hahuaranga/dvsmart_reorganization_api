@@ -13,22 +13,23 @@
  */
 package com.indra.minsait.dvsmart.reorganization.adapter.out.batch.writter;
 
-import com.indra.minsait.dvsmart.reorganization.application.port.out.OrganizedFilesIndexRepository;
+import com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity.DisorganizedFilesIndexDocument;
 import com.indra.minsait.dvsmart.reorganization.application.port.out.SftpDestinationRepository;
 import com.indra.minsait.dvsmart.reorganization.application.port.out.SftpOriginRepository;
 import com.indra.minsait.dvsmart.reorganization.domain.model.ArchivoLegacy;
-import com.indra.minsait.dvsmart.reorganization.domain.model.ProcessedArchivo;
 import com.indra.minsait.dvsmart.reorganization.domain.service.FileReorganizationService;
 import com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.infrastructure.item.Chunk;
 import org.springframework.batch.infrastructure.item.ItemWriter;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
 import java.io.InputStream;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Author: hahuaranga@indracompany.com
@@ -43,56 +44,80 @@ public class SftpMoveAndIndexItemWriter implements ItemWriter<ArchivoLegacy> {
 
     private final SftpOriginRepository originRepo;
     private final SftpDestinationRepository destRepo;
-    private final OrganizedFilesIndexRepository indexingRepo;
+    private final MongoTemplate mongoTemplate;  // ✅ CAMBIO: Inyectar MongoTemplate
     private final FileReorganizationService reorganizationService;
     private final SftpConfigProperties props;
 
     @Override
     public void write(Chunk<? extends ArchivoLegacy> chunk) {
-        List<ProcessedArchivo> indexingRecords = new ArrayList<>();
-        
         for (ArchivoLegacy archivo : chunk) {
-            ProcessedArchivo audit = processFile(archivo);
-            indexingRecords.add(audit);
-        }
-        
-        if (!indexingRecords.isEmpty()) {
-            indexingRepo.saveAll(indexingRecords);
+            long startTime = System.currentTimeMillis();
+            
+            try {
+                // Calcular ruta destino
+                String destinationPath = reorganizationService.calculateDestinationPath(
+                    archivo, props.getDest().getBaseDir());
+                
+                // Transferir archivo
+                try (InputStream in = originRepo.readFile(archivo.getRutaOrigen())) {
+                    destRepo.transferTo(destinationPath, in);
+                }
+                
+                long duration = System.currentTimeMillis() - startTime;
+                
+                // ✅ ACTUALIZAR documento con estado SUCCESS
+                updateReorgStatus(
+                    archivo.getIdUnico(),
+                    "SUCCESS",
+                    destinationPath,
+                    duration,
+                    null
+                );
+                
+                log.debug("✅ Processed successfully: {} -> {} ({}ms)", 
+                    archivo.getRutaOrigen(), destinationPath, duration);
+                
+            } catch (Exception e) {
+                log.error("❌ Failed to process: {}", archivo.getIdUnico(), e);
+                
+                long duration = System.currentTimeMillis() - startTime;
+                
+                // ✅ ACTUALIZAR documento con estado FAILED
+                updateReorgStatus(
+                    archivo.getIdUnico(),
+                    "FAILED",
+                    null,
+                    duration,
+                    e.getMessage()
+                );
+            }
         }
     }
 
-    private ProcessedArchivo processFile(ArchivoLegacy archivo) {
-        String destinationPath = reorganizationService.calculateDestinationPath(
-            archivo, props.getDest().getBaseDir());
+    /**
+     * ✅ NUEVO MÉTODO: Actualiza el estado de reorganización en MongoDB
+     */
+    private void updateReorgStatus(String idUnico, String status, 
+                                     String destinationPath, long durationMs, 
+                                     String errorDescription) {
+        Query query = Query.query(Criteria.where("idUnico").is(idUnico));
         
-        try (InputStream in = originRepo.readFile(archivo.getRutaOrigen())) {
-            
-            // Transferencia streaming directa (crea dirs internamente)
-            destRepo.transferTo(destinationPath, in);
-            
-            log.debug("Successfully transferred: {} -> {}", archivo.getRutaOrigen(), destinationPath);
-            
-            return ProcessedArchivo.builder()
-                    .idUnico(archivo.getIdUnico())
-                    .rutaOrigen(archivo.getRutaOrigen())
-                    .rutaDestino(destinationPath)
-                    .nombre(archivo.getNombre())
-                    .status("SUCCESS")
-                    .processedAt(Instant.now())
-                    .build();
-                    
-        } catch (Exception e) {
-            log.error("Failed to process file: {}", archivo.getRutaOrigen(), e);
-            
-            return ProcessedArchivo.builder()
-                    .idUnico(archivo.getIdUnico())
-                    .rutaOrigen(archivo.getRutaOrigen())
-                    .rutaDestino(destinationPath)
-                    .nombre(archivo.getNombre())
-                    .status("FAILED")
-                    .processedAt(Instant.now())
-                    .errorMessage(e.getMessage())
-                    .build();
+        Update update = new Update()
+                .set("reorg_status", status)
+                .set("reorg_lastAttemptAt", Instant.now())
+                .inc("reorg_attempts", 1);  // Incrementar intentos
+        
+        if ("SUCCESS".equals(status)) {
+            update.set("reorg_destinationPath", destinationPath);
+            update.set("reorg_reorganizedAt", Instant.now());
+            update.set("reorg_durationMs", durationMs);
         }
+        
+        if (errorDescription != null) {
+            update.set("reorg_errorDescription", errorDescription);
+        }
+        
+        // Actualizar documento
+        mongoTemplate.updateFirst(query, update, DisorganizedFilesIndexDocument.class);
     }
 }

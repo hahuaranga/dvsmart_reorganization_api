@@ -28,5 +28,5 @@ import lombok.Setter;
 @Setter
 @ConfigurationProperties(prefix = "mongo")
 public class MongoConfigProperties {
-	private String disorganizedFilesIndex = "disorganized-files-index";
+	private String filesIndex = "files_index"; 
 }

@@ -50,9 +50,9 @@ public class DisorganizedFilesIndexRepositoryImpl implements DisorganizedFilesIn
     private ArchivoLegacy toModel(DisorganizedFilesIndexDocument doc) {
         return ArchivoLegacy.builder()
                 .idUnico(doc.getIdUnico())
-                .rutaOrigen(doc.getRutaOrigen())
-                .nombre(doc.getNombre())
-                .mtime(doc.getMtime())
+                .rutaOrigen(doc.getSourcePath())             // ✅ CAMBIO
+                .nombre(doc.getFileName())                   // ✅ CAMBIO
+                .mtime(doc.getLastModificationDate())        // ✅ CAMBIO
                 .build();
     }
 }

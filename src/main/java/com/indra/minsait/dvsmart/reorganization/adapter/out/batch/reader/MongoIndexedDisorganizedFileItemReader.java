@@ -50,10 +50,9 @@ public class MongoIndexedDisorganizedFileItemReader {
      * @return MongoCursorItemReader configurado
      */
     public MongoCursorItemReader<DisorganizedFilesIndexDocument> createReader() {
-        // Query vacía = todos los documentos
-        Document query = new Document();
+        // ✅ FILTRAR: Solo archivos pendientes de reorganizar
+        Document query = new Document("reorg_status", "PENDING");
         
-        // Sort por _id para orden consistente y uso de índice
         Map<String, Sort.Direction> sorts = new HashMap<>();
         sorts.put("_id", Sort.Direction.ASC);
         
@@ -63,9 +62,9 @@ public class MongoIndexedDisorganizedFileItemReader {
                 .jsonQuery(query.toJson())
                 .targetType(DisorganizedFilesIndexDocument.class)
                 .sorts(sorts)
-                .collection(properties.getDisorganizedFilesIndex())
-                .batchSize(100) // Tamaño del batch interno del cursor
-                .saveState(true) // Permite restart del job
+                .collection(properties.getFilesIndex())  // ✅ CAMBIO: Nombre nuevo
+                .batchSize(100)
+                .saveState(true)
                 .build();
     }
 }

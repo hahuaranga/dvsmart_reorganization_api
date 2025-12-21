@@ -42,7 +42,7 @@ public class StartReorganizeFullService implements StartReorganizeFullUseCase {
     
     @Override
     @SchedulerLock(
-            name = "indexing-full-job",
+            name = "reorganize-full-job",
             lockAtMostFor = "PT2H",    // 2 horas máximo
             lockAtLeastFor = "PT30M"   // 30 minutos mínimo
         )    

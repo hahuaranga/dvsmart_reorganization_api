@@ -26,7 +26,7 @@ import java.time.Instant;
  */
 
 @Data
-@Document(collection = "disorganized-files-index")
+@Document(collection = "files_index")
 public class DisorganizedFilesIndexDocument {
     
     @Id
@@ -35,18 +35,31 @@ public class DisorganizedFilesIndexDocument {
     @Indexed(unique = true)
     private String idUnico;
     
-    private String rutaOrigen;
-    private String nombre;
-    
-    // Mantiene la fecha de modificación del archivo
-    private Instant mtime;
-    
-    // Nuevo campo: tamaño del archivo (corresponde a NumberLong en MongoDB)
-    private Long tamanio;
-    
-    // Nuevo campo: extensión del archivo
+    // ========== METADATA DEL ARCHIVO ==========
+    private String sourcePath;           // ✅ NUEVO (antes rutaOrigen)
+    private String fileName;             // ✅ NUEVO (antes nombre)
     private String extension;
+    private Long fileSize;               // ✅ NUEVO (antes tamanio)
+    private Instant lastModificationDate; // ✅ NUEVO (antes mtime)
     
-    // Nuevo campo: fecha en que el documento fue indexado (corresponde a Date en MongoDB)
-    private Instant indexadoEn;    
+    // ========== CONTROL DE INDEXACIÓN ==========
+    private String indexing_status;       // ✅ NUEVO
+    private Instant indexing_indexedAt;   // ✅ NUEVO (antes indexadoEn)
+    private String indexing_errorDescription; // ✅ NUEVO
+    
+    // ========== CONTROL DE REORGANIZACIÓN ==========
+    private String reorg_status;          // ✅ NUEVO
+    private String reorg_destinationPath; // ✅ NUEVO
+    private Instant reorg_reorganizedAt;  // ✅ NUEVO
+    private Long reorg_jobExecutionId;    // ✅ NUEVO
+    private Long reorg_durationMs;        // ✅ NUEVO
+    private Integer reorg_attempts;       // ✅ NUEVO
+    private String reorg_errorDescription; // ✅ NUEVO
+    private Instant reorg_lastAttemptAt;  // ✅ NUEVO
+    
+    // ========== METADATA DE NEGOCIO (OPCIONAL) ==========
+    private String business_tipoDocumento; // ✅ NUEVO
+    private String business_codigoCliente; // ✅ NUEVO
+    private Integer business_anio;         // ✅ NUEVO
+    private Integer business_mes;          // ✅ NUEVO    
 }
