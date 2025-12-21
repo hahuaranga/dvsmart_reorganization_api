@@ -14,8 +14,6 @@
 package com.indra.minsait.dvsmart.reorganization.adapter.out.sftp;
 
 import com.indra.minsait.dvsmart.reorganization.application.port.out.SftpOriginRepository;
-
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.sshd.sftp.client.SftpClient;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -41,11 +39,14 @@ import java.io.InputStream;
  */
 @Slf4j
 @Repository
-@RequiredArgsConstructor
 public class SftpOriginRepositoryImpl implements SftpOriginRepository {
-
-	@Qualifier("sftpOriginTemplate")
+	
     private final SftpRemoteFileTemplate originTemplate;
+    
+    // Constructor manual con @Qualifier (correcto para Lombok)
+    public SftpOriginRepositoryImpl(@Qualifier("sftpOriginTemplate") SftpRemoteFileTemplate originTemplate) {
+        this.originTemplate = originTemplate;
+    }
     
     // ✅ Buffer de 8KB para reducir llamadas de red
     private static final int BUFFER_SIZE = 8192;
