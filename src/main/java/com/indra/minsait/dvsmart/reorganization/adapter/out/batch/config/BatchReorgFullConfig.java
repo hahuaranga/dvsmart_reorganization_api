@@ -188,12 +188,12 @@ public class BatchReorgFullConfig {
                 // ✅ 2. Skip de excepciones específicas
                 .skip(IOException.class)
                 .skip(SocketTimeoutException.class)
-                .skipLimit(100)
+                .skipLimit(batchProps.getSkipLimit())
                 
                 // ✅ 3. Retry policy (SIN backOffPolicy - no existe ese método)
                 .retry(SocketTimeoutException.class)
                 .retry(SocketException.class)
-                .retryLimit(3)
+                .retryLimit(batchProps.getRetryLimit())
                 
                 // ✅ 4. Listener correcto (ExitStatus, no void)
                 .listener(new StepExecutionListener() {
