@@ -30,6 +30,14 @@ public class SftpConfigProperties {
     
     private Origin origin = new Origin();
     private Destination dest = new Destination();
+    private HashPartitioning hashPartitionig = new HashPartitioning();
+
+    @Getter
+    @Setter
+    public static class HashPartitioning{
+    	private int partitionDepth = 3;
+    	private int charsPerLevel = 2;
+    } 
     
     @Getter
     @Setter

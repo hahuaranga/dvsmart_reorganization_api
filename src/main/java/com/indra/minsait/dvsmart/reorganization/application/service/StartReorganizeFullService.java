@@ -67,11 +67,6 @@ public class StartReorganizeFullService implements StartReorganizeFullUseCase {
             // Lanzar job usando el nombre del job (definido en BatchReorgFullConfig)
             JobExecution jobExecution = jobOperator.start(batchReorgFullJob, jobParameters);
             
-            
-            
-            
-            
-            
             log.info("Job launched successfully. JobExecutionId: {}, Status: {}", 
                     jobExecution.getId(), jobExecution.getStatus());
             

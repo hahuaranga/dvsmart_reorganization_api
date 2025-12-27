@@ -62,7 +62,7 @@ public class MongoIndexedDisorganizedFileItemReader {
                 .jsonQuery(query.toJson())
                 .targetType(DisorganizedFilesIndexDocument.class)
                 .sorts(sorts)
-                .collection(properties.getFilesIndex())  // ✅ CAMBIO: Nombre nuevo
+                .collection(properties.getFilesIndex())
                 .batchSize(100)
                 .saveState(true)
                 .build();
