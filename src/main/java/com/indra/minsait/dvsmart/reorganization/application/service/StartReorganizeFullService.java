@@ -14,8 +14,14 @@
 package com.indra.minsait.dvsmart.reorganization.application.service;
 
 import com.indra.minsait.dvsmart.reorganization.application.port.in.StartReorganizeFullUseCase;
+
+import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import java.time.LocalDateTime;
+import java.util.Map;
+
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.JobExecution;
 import org.springframework.batch.core.job.parameters.JobParameters;
@@ -39,16 +45,32 @@ public class StartReorganizeFullService implements StartReorganizeFullUseCase {
     private final Job batchReorgFullJob;
     
     @Override   
-    public Long execute() {
-        try {
+    public Long execute(@NotBlank(message = "Job name is required") String string, Map<String, Object> map) {
+        log.info("Starting FULL REORGANIZATION JOB");
+    	
+    	try {
             // ✅ JobParametersBuilder en lugar de Properties
-            JobParameters jobParameters = new JobParametersBuilder()
-                    .addLong("timestamp", System.currentTimeMillis())
-                    .addString("uniqueId", java.util.UUID.randomUUID().toString())
-                    .toJobParameters();  
+            JobParametersBuilder paramsBuilder = new JobParametersBuilder();
+            paramsBuilder.addLocalDateTime("timestamp", LocalDateTime.now(), true);
+            map.forEach((key, value) -> {
+                if (value instanceof String) {
+                	paramsBuilder.addString(key, (String) value);
+                } else if (value instanceof Long) {
+                	paramsBuilder.addLong(key, (Long) value);
+                } else if (value instanceof Double) {
+                	paramsBuilder.addDouble(key, (Double) value);
+                }
+            });        
+            JobParameters jobParameters = paramsBuilder.toJobParameters();
+            log.info("Generated parameters: {}", jobParameters);  
             
             // Lanzar job usando el nombre del job (definido en BatchReorgFullConfig)
             JobExecution jobExecution = jobOperator.start(batchReorgFullJob, jobParameters);
+            
+            
+            
+            
+            
             
             log.info("Job launched successfully. JobExecutionId: {}, Status: {}", 
                     jobExecution.getId(), jobExecution.getStatus());

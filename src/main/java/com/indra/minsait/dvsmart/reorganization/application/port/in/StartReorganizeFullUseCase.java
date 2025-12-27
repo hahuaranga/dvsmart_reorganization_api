@@ -13,6 +13,10 @@
  */
 package com.indra.minsait.dvsmart.reorganization.application.port.in;
 
+import java.util.Map;
+
+import jakarta.validation.constraints.NotBlank;
+
 /**
  * Author: hahuaranga@indracompany.com
  * Created on: 12-12-2025 at 12:30:07
@@ -20,5 +24,5 @@ package com.indra.minsait.dvsmart.reorganization.application.port.in;
  */
 
 public interface StartReorganizeFullUseCase {
-    Long execute();
+    Long execute(@NotBlank(message = "Job name is required") String string, Map<String, Object> map);
 }
