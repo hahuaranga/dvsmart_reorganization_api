@@ -13,9 +13,9 @@
  */
 package com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity;
 
+import lombok.Builder;
 import lombok.Data;
 import org.springframework.data.annotation.Id;
-import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import java.time.Instant;
 
@@ -25,41 +25,48 @@ import java.time.Instant;
  * File: ArchivoIndexDocument.java
  */
 
+/**
+ * ✅ Documento MongoDB para colección UNIFICADA files_index.
+ * Soporta tanto indexación como reorganización.
+ * 
+ * Los índices se crean mediante script 01_init_collections.js
+ */
 @Data
-@Document(collection = "files_index")
+@Builder
+@Document(collection = "files_index")  // ✅ Colección unificada
 public class DisorganizedFilesIndexDocument {
     
     @Id
     private String id;
     
-    @Indexed(unique = true)
-    private String idUnico;
+    // ✅ SIN @Indexed - Los índices están en el script
+    private String idUnico;           // SHA-256 del path completo
     
     // ========== METADATA DEL ARCHIVO ==========
-    private String sourcePath;           // ✅ NUEVO (antes rutaOrigen)
-    private String fileName;             // ✅ NUEVO (antes nombre)
+    private String sourcePath;         // Ruta en SFTP origen
+    private String fileName;
     private String extension;
-    private Long fileSize;               // ✅ NUEVO (antes tamanio)
-    private Instant lastModificationDate; // ✅ NUEVO (antes mtime)
+    private Long fileSize;
+    private Instant lastModificationDate;
     
     // ========== CONTROL DE INDEXACIÓN ==========
-    private String indexing_status;       // ✅ NUEVO
-    private Instant indexing_indexedAt;   // ✅ NUEVO (antes indexadoEn)
-    private String indexing_errorDescription; // ✅ NUEVO
+    private String indexing_status;         // PENDING | COMPLETED | FAILED
+    private Instant indexing_indexedAt;
+    private String indexing_errorDescription;
     
     // ========== CONTROL DE REORGANIZACIÓN ==========
-    private String reorg_status;          // ✅ NUEVO
-    private String reorg_destinationPath; // ✅ NUEVO
-    private Instant reorg_reorganizedAt;  // ✅ NUEVO
-    private Long reorg_jobExecutionId;    // ✅ NUEVO
-    private Long reorg_durationMs;        // ✅ NUEVO
-    private Integer reorg_attempts;       // ✅ NUEVO
-    private String reorg_errorDescription; // ✅ NUEVO
-    private Instant reorg_lastAttemptAt;  // ✅ NUEVO
+    private String reorg_status;            // PENDING | PROCESSING | SUCCESS | FAILED | SKIPPED
+    private String reorg_destinationPath;
+    private Instant reorg_reorganizedAt;
+    private Long reorg_jobExecutionId;
+    private Long reorg_durationMs;
+    private Integer reorg_attempts;
+    private String reorg_errorDescription;
+    private Instant reorg_lastAttemptAt;
     
     // ========== METADATA DE NEGOCIO (OPCIONAL) ==========
-    private String business_tipoDocumento; // ✅ NUEVO
-    private String business_codigoCliente; // ✅ NUEVO
-    private Integer business_anio;         // ✅ NUEVO
-    private Integer business_mes;          // ✅ NUEVO    
+    private String business_tipoDocumento;
+    private String business_codigoCliente;
+    private Integer business_anio;
+    private Integer business_mes;
 }
