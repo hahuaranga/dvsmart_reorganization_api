@@ -26,47 +26,66 @@ import java.time.Instant;
  */
 
 /**
- * ✅ Documento MongoDB para colección UNIFICADA files_index.
- * Soporta tanto indexación como reorganización.
+ * ✅ Documento MongoDB para colección UNIFICADA files_index. Soporta tanto
+ * indexación como reorganización.
  * 
  * Los índices se crean mediante script 01_init_collections.js
  */
 @Data
 @Builder
-@Document(collection = "files_index")  // ✅ Colección unificada
+@Document(collection = "files_index") // ✅ Colección unificada
 public class DisorganizedFilesIndexDocument {
-    
-    @Id
-    private String id;
-    
-    // ✅ SIN @Indexed - Los índices están en el script
-    private String idUnico;           // SHA-256 del path completo
-    
-    // ========== METADATA DEL ARCHIVO ==========
-    private String sourcePath;         // Ruta en SFTP origen
-    private String fileName;
-    private String extension;
-    private Long fileSize;
-    private Instant lastModificationDate;
-    
-    // ========== CONTROL DE INDEXACIÓN ==========
-    private String indexing_status;         // PENDING | COMPLETED | FAILED
-    private Instant indexing_indexedAt;
-    private String indexing_errorDescription;
-    
-    // ========== CONTROL DE REORGANIZACIÓN ==========
-    private String reorg_status;            // PENDING | PROCESSING | SUCCESS | FAILED | SKIPPED
-    private String reorg_destinationPath;
-    private Instant reorg_reorganizedAt;
-    private Long reorg_jobExecutionId;
-    private Long reorg_durationMs;
-    private Integer reorg_attempts;
-    private String reorg_errorDescription;
-    private Instant reorg_lastAttemptAt;
-    
-    // ========== METADATA DE NEGOCIO (OPCIONAL) ==========
-    private String business_tipoDocumento;
-    private String business_codigoCliente;
-    private Integer business_anio;
-    private Integer business_mes;
+
+	@Id
+	private String id;
+
+	// ✅ SIN @Indexed - Los índices están en el script
+	private String idUnico; // SHA-256 del path completo
+
+	// ========== METADATA DEL ARCHIVO ==========
+	private String sourcePath; // Ruta en SFTP origen
+	private String fileName;
+	private String extension;
+	private Long fileSize;
+	private Instant lastModificationDate;
+
+	// ========== CONTROL DE INDEXACIÓN ==========
+	private String indexing_status; // PENDING | COMPLETED | FAILED
+	private Instant indexing_indexedAt;
+	private String indexing_errorDescription;
+
+	// ========== CONTROL DE REORGANIZACIÓN ==========
+	private String reorg_status; // PENDING | PROCESSING | SUCCESS | FAILED | SKIPPED
+	private String reorg_destinationPath;
+	private Instant reorg_completedAt;
+	private Long reorg_jobExecutionId;
+	private Long reorg_durationMs;
+	private Integer reorg_attempts;
+	private String reorg_errorDescription;
+	private Instant reorg_lastAttemptAt;
+
+	// ========== METADATA DE NEGOCIO (OPCIONAL) ==========
+	private String business_tipoDocumento;
+	private String business_codigoCliente;
+	private Integer business_anio;
+	private Integer business_mes;
+
+	// ═══════════════════════════════════════════════════════════════
+	// CONTROL DE CLEANUP (BORRADO ORIGEN) - NUEVOS CAMPOS
+	// ═══════════════════════════════════════════════════════════════
+
+	/**
+	 * Indica si el archivo fue borrado del SFTP origen
+	 */
+	private Boolean deleted_from_source; // Default: false
+
+	/**
+	 * Fecha en que se borró del origen
+	 */
+	private Instant source_deletion_date;
+
+	/**
+	 * Identificador del proceso que borró Ejemplo: "cleanup-step-pipelined"
+	 */
+	private String deleted_by;
 }

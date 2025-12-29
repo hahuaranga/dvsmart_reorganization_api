@@ -18,7 +18,9 @@ import lombok.Data;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
+import com.indra.minsait.dvsmart.reorganization.domain.model.StepExecutionSummary;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -34,62 +36,82 @@ import java.util.Map;
 @Builder
 @Document(collection = "job_executions_audit")
 public class JobExecutionAuditDocument {
-    
-    @Id
-    private String id;
-    
-    @Indexed(unique = true)
-    private String auditId;
-    
-    @Indexed
-    private Long jobExecutionId;
-    
-    // Información del servicio y job
-    private String serviceName;
-    
-    @Indexed
-    private String jobName;
-    
-    // Tiempos de ejecución
-    @Indexed
-    private Instant startTime;
-    private Instant endTime;
-    private Long durationMs;
-    private String durationFormatted;
-    
-    // Estado y resultados
-    @Indexed
-    private String status;
-    private String exitCode;
-    private String exitDescription;
-    
-    // Métricas de procesamiento
-    private Long totalFilesIndexed;
-    private Long totalFilesProcessed;
-    private Long totalFilesSkipped;
-    private Long totalFilesFailed;
-    private Long totalDirectoriesProcessed;
-    
-    // Métricas de rendimiento
-    private Long readCount;
-    private Long writeCount;
-    private Long commitCount;
-    private Long rollbackCount;
-    private Double filesPerSecond;
-    
-    // Información de errores
-    private String errorDescription;
-    private String errorStackTrace;
-    private Integer failureCount;
-    
-    // Parámetros del job
-    private Map<String, Object> jobParameters;
-    
-    // Información del servidor
-    private String hostname;
-    private String instanceId;
-    
-    // Auditoría
-    private Instant createdAt;
-    private Instant updatedAt;
+
+	@Id
+	private String id;
+
+	@Indexed(unique = true)
+	private String auditId;
+
+	@Indexed
+	private Long jobExecutionId;
+
+	// Información del servicio y job
+	private String serviceName;
+
+	@Indexed
+	private String jobName;
+
+	// Tiempos de ejecución
+	@Indexed
+	private Instant startTime;
+	private Instant endTime;
+	private Long durationMs;
+	private String durationFormatted;
+
+	// Estado y resultados
+	@Indexed
+	private String status;
+	private String exitCode;
+	private String exitDescription;
+
+	// Métricas de procesamiento
+	private Long totalFilesReorganized;
+	private Long totalFilesProcessed;
+	private Long totalFilesSkipped;
+	private Long totalFilesFailed;
+	private Long totalDirectoriesProcessed;
+
+	// Métricas de rendimiento
+	private Long readCount;
+	private Long writeCount;
+	private Long commitCount;
+	private Long rollbackCount;
+	private Double filesPerSecond;
+
+	// Información de errores
+	private String errorDescription;
+	private String errorStackTrace;
+	private Integer failureCount;
+
+	// Parámetros del job
+	private Map<String, Object> jobParameters;
+
+	// Información del servidor
+	private String hostname;
+	private String instanceId;
+
+	// Auditoría
+	private Instant createdAt;
+	private Instant updatedAt;
+
+	// ═══════════════════════════════════════════════════════════════
+	// MÉTRICAS DE CLEANUP (STEP 2) - NUEVOS CAMPOS
+	// ═══════════════════════════════════════════════════════════════
+
+	/**
+	 * Total de archivos borrados del origen
+	 */
+	private Long totalFilesDeleted;
+
+	/**
+	 * Total de archivos que fallaron al borrar
+	 */
+	private Long totalFilesDeletionFailed;
+
+	/**
+	 * Desglose de métricas por step
+	 */
+	private List<StepExecutionSummary> stepExecutions;
+	
 }

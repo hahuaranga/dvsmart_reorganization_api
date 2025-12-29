@@ -28,6 +28,8 @@ import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Component;
+
+import java.io.IOException;
 import java.io.InputStream;
 import java.time.Instant;
 
@@ -54,14 +56,7 @@ public class SftpMoveAndIndexItemWriter implements ItemWriter<ArchivoLegacy> {
             long startTime = System.currentTimeMillis();
             
             try {
-                // Calcular ruta destino
-                String destinationPath = reorganizationService.calculateDestinationPath(
-                    archivo, props.getDest().getBaseDir());
-                
-                // Transferir archivo
-                try (InputStream in = originRepo.readFile(archivo.getRutaOrigen())) {
-                    destRepo.transferTo(destinationPath, in);
-                }
+                String destinationPath = copyFileToDestination(archivo);
                 
                 long duration = System.currentTimeMillis() - startTime;
                 
@@ -94,8 +89,20 @@ public class SftpMoveAndIndexItemWriter implements ItemWriter<ArchivoLegacy> {
         }
     }
 
+	private String copyFileToDestination(ArchivoLegacy archivo) throws IOException {
+		// Calcular ruta destino
+		String destinationPath = reorganizationService.calculateDestinationPath(
+		    archivo, props.getDest().getBaseDir());
+		
+		// Transferir archivo
+		try (InputStream in = originRepo.readFile(archivo.getRutaOrigen())) {
+		    destRepo.transferTo(destinationPath, in);
+		}
+		return destinationPath;
+	}
+
     /**
-     * ✅ NUEVO MÉTODO: Actualiza el estado de reorganización en MongoDB
+     * Actualiza el estado de reorganización en MongoDB
      */
     private void updateReorgStatus(String idUnico, String status, 
                                      String destinationPath, long durationMs, 
@@ -104,13 +111,13 @@ public class SftpMoveAndIndexItemWriter implements ItemWriter<ArchivoLegacy> {
         
         Update update = new Update()
                 .set("reorg_status", status)
-                .set("reorg_lastAttemptAt", Instant.now())
                 .inc("reorg_attempts", 1);  // Incrementar intentos
         
         if ("SUCCESS".equals(status)) {
             update.set("reorg_destinationPath", destinationPath);
-            update.set("reorg_reorganizedAt", Instant.now());
+            update.set("reorg_completedAt", Instant.now());
             update.set("reorg_durationMs", durationMs);
+            update.set("deleted_from_source", false);
         }
         
         if (errorDescription != null) {

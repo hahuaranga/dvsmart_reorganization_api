@@ -13,18 +13,22 @@
  */
 package com.indra.minsait.dvsmart.reorganization.adapter.out.batch.config;
 
+import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.listener.JobExecutionAuditListener;
+import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.processor.CleanupValidator;
+import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.reader.CleanupCandidateReader;
 import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.reader.MongoIndexedDisorganizedFileItemReader;
+import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.writter.OriginFileDeleteWriter;
 import com.indra.minsait.dvsmart.reorganization.adapter.out.batch.writter.SftpMoveAndIndexItemWriter;
 import com.indra.minsait.dvsmart.reorganization.adapter.out.persistence.mongodb.entity.DisorganizedFilesIndexDocument;
 import com.indra.minsait.dvsmart.reorganization.domain.model.ArchivoLegacy;
+import com.indra.minsait.dvsmart.reorganization.domain.model.CleanupCandidate;
+import com.indra.minsait.dvsmart.reorganization.domain.model.CleanupResult;
 import com.indra.minsait.dvsmart.reorganization.domain.service.FileReorganizationService;
 import com.indra.minsait.dvsmart.reorganization.infrastructure.config.BatchConfigProperties;
 import com.indra.minsait.dvsmart.reorganization.infrastructure.config.SftpConfigProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.ExitStatus;
-import org.springframework.batch.core.configuration.JobRegistry;
-import org.springframework.batch.core.configuration.support.MapJobRegistry;
 import org.springframework.batch.core.job.Job;
 import org.springframework.batch.core.job.builder.JobBuilder;
 import org.springframework.batch.core.listener.StepExecutionListener;
@@ -64,19 +68,10 @@ public class BatchReorgFullConfig {
     private final FileReorganizationService reorganizationService;
     private final SftpConfigProperties sftpProps;
     private final BatchConfigProperties batchProps;
-
-    // ========================================================================
-    // NUEVOS BEANS AGREGADOS PARA JobOperator
-    // ========================================================================
-    
-    /**
-     * JobRegistry para que JobOperator pueda encontrar jobs por nombre.
-     * Sin este bean, JobOperator lanzará NoSuchJobException.
-     */
-    @Bean
-    JobRegistry jobRegistry() {
-        return new MapJobRegistry();
-    }
+    private final JobExecutionAuditListener auditListener;
+    private final CleanupCandidateReader cleanupCandidateReader;
+    private final CleanupValidator cleanupValidator;
+    private final OriginFileDeleteWriter originFileDeleteWriter;
 
     // ========================================================================
     // BEANS EXISTENTES (SIN CAMBIOS)
@@ -172,6 +167,7 @@ public class BatchReorgFullConfig {
     }
 
     /**
+     * Step 1: Reorganización (copiar archivos SIN borrar origen)
      * Step principal con chunk-oriented processing
      */
     @Bean
@@ -208,6 +204,22 @@ public class BatchReorgFullConfig {
                 })            
                 .build();
     }
+    
+    /**
+     * Step 2: Cleanup (borrar archivos del origen)
+     */
+    @Bean
+    Step cleanupOriginStep() {
+        return new StepBuilder("cleanup-origin-step", jobRepository)
+            .<CleanupCandidate, CleanupResult>chunk(500)  // Chunks más grandes
+            .reader(cleanupCandidateReader)
+            .processor(cleanupValidator)
+            .writer(originFileDeleteWriter)
+            .faultTolerant()
+            .skip(Exception.class)       // Skip errores individuales
+            .skipLimit(1000)             // Tolerar hasta 1000 fallos
+            .build();
+    }    
 
     /**
      * Job completo de reorganización.
@@ -217,6 +229,8 @@ public class BatchReorgFullConfig {
     Job batchReorgFullJob() {
         return new JobBuilder("BATCH-REORG-FULL", jobRepository)
                 .start(reorganizeStep())
+                .next(cleanupOriginStep())
+                .listener(auditListener)
                 .build();
     }
 }
