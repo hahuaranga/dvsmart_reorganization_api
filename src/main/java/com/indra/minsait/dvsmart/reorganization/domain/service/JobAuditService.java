@@ -1,7 +1,7 @@
 /*
  * /////////////////////////////////////////////////////////////////////////////
  *
- * Copyright (c) 2025 Indra Sistemas, S.A. All Rights Reserved.
+ * Copyright (c) 2026 Indra Sistemas, S.A. All Rights Reserved.
  * http://www.indracompany.com/
  *
  * The contents of this file are owned by Indra Sistemas, S.A. copyright holder.
@@ -85,22 +85,23 @@ public class JobAuditService {
         try {
             Long jobExecutionId = jobExecution.getId();
             
-            // ✅ 1. Obtener documento de BD
             JobExecutionAuditDocument document = auditRepository
                     .findByJobExecutionId(jobExecutionId)
                     .orElseThrow(() -> new IllegalStateException(
                             "Audit record not found for job execution: " + jobExecutionId));
             
-            // ✅ 2. Mapear a modelo de dominio
+            // ✅ NUEVO: Guardar el _id original
+            String originalId = document.getId();
+            
             JobExecutionAudit audit = toDomain(document);
             
-            // ✅ 3. Actualizar modelo de dominio con métricas de TODOS los steps
             updateAuditWithJobMetrics(audit, jobExecution);
             
-            // ✅ 4. Mapear de vuelta a entidad
             document = toDocument(audit);
             
-            // ✅ 5. Persistir
+            // ✅ NUEVO: Restaurar el _id para que save() haga UPDATE
+            document.setId(originalId);
+            
             auditRepository.save(document);
             
             log.info("✅ Audit record updated: auditId={}, status={}, steps={}, filesReorganized={}, filesDeleted={}, duration={}", 
