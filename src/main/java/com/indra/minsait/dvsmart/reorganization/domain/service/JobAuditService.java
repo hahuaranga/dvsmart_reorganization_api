@@ -22,6 +22,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.batch.core.job.JobExecution;
 import org.springframework.batch.core.step.StepExecution;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.stereotype.Service;
 import java.net.InetAddress;
 import java.time.Duration;
@@ -47,6 +51,8 @@ public class JobAuditService {
     
     private final JobExecutionAuditRepository auditRepository;
     
+    private final MongoTemplate mongoTemplate;
+    
     @Value("${spring.application.name:dvsmart-reorganization-api}")
     private String serviceName;
     
@@ -54,24 +60,45 @@ public class JobAuditService {
      * Crea un registro de auditoría al inicio del job.
      * ✅ RETORNA: Modelo de dominio
      */
+    /**
+     * Crea un registro de auditoría al inicio del job.
+     * ✅ Usa upsert para evitar errores de duplicate key
+     */
     public String createAuditRecord(JobExecution jobExecution) {
         try {
-            // ✅ 1. Crear modelo de dominio
+            // 1. Crear modelo de dominio
             JobExecutionAudit audit = buildInitialAudit(jobExecution);
-            
-            // ✅ 2. Mapear a entidad de infraestructura
+
+            // 2. Mapear a entidad de infraestructura
             JobExecutionAuditDocument document = toDocument(audit);
+
+            // 3. Usar upsert: si existe actualiza, si no existe inserta
+            Query query = new Query(Criteria.where("jobExecutionId").is(audit.getJobExecutionId()));
             
-            // ✅ 3. Persistir
-            auditRepository.save(document);
+            Update update = new Update()
+                // Campos que solo se setean en INSERT (no sobrescribir si ya existe)
+                .setOnInsert("auditId", document.getAuditId())
+                .setOnInsert("jobExecutionId", document.getJobExecutionId())
+                .setOnInsert("serviceName", document.getServiceName())
+                .setOnInsert("jobName", document.getJobName())
+                .setOnInsert("jobParameters", document.getJobParameters())
+                .setOnInsert("hostname", document.getHostname())
+                .setOnInsert("instanceId", document.getInstanceId())
+                .setOnInsert("createdAt", document.getCreatedAt())
+                // Campos que siempre se actualizan
+                .set("startTime", document.getStartTime())
+                .set("status", document.getStatus())
+                .set("updatedAt", Instant.now());
             
-            log.info("✅ Audit record created: auditId={}, jobExecutionId={}", 
+            mongoTemplate.upsert(query, update, JobExecutionAuditDocument.class);
+
+            log.info("✅ Audit record created: auditId={}, jobExecutionId={}",
                      audit.getAuditId(), audit.getJobExecutionId());
-            
+
             return audit.getAuditId();
-            
+
         } catch (Exception e) {
-            log.error("Failed to create audit record for job execution: {}", 
+            log.error("Failed to create audit record for job execution: {}",
                       jobExecution.getId(), e);
             return null;
         }
