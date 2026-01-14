@@ -113,7 +113,7 @@ public class SftpMoveAndIndexItemWriter implements ItemWriter<ArchivoLegacy> {
                 .set("reorg_status", status)
                 .inc("reorg_attempts", 1);  // Incrementar intentos
         
-        if ("SUCCESS".equals(status)) {
+        if ("COMPLETED".equals(status)) {
             update.set("reorg_destinationPath", destinationPath);
             update.set("reorg_completedAt", Instant.now());
             update.set("reorg_durationMs", durationMs);

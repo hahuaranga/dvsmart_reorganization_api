@@ -110,9 +110,9 @@ public class BatchReorgFullConfig {
             }
             return ArchivoLegacy.builder()
                     .idUnico(doc.getIdUnico())
-                    .rutaOrigen(doc.getSourcePath())          // ✅ CAMBIO
-                    .nombre(doc.getFileName())                // ✅ CAMBIO
-                    .mtime(doc.getLastModificationDate())     // ✅ CAMBIO
+                    .rutaOrigen(doc.getSourcePath())
+                    .nombre(doc.getFileName())
+                    .mtime(doc.getLastModificationDate())
                     .build();
         };
     }
