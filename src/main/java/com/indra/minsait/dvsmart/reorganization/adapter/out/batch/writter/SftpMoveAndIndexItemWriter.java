@@ -60,10 +60,10 @@ public class SftpMoveAndIndexItemWriter implements ItemWriter<ArchivoLegacy> {
                 
                 long duration = System.currentTimeMillis() - startTime;
                 
-                // ✅ ACTUALIZAR documento con estado SUCCESS
+                // ✅ ACTUALIZAR documento con estado COMPLETED
                 updateReorgStatus(
                     archivo.getIdUnico(),
-                    "SUCCESS",
+                    "COMPLETED",
                     destinationPath,
                     duration,
                     null

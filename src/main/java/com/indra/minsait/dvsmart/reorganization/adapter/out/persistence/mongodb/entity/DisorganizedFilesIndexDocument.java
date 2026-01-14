@@ -55,7 +55,7 @@ public class DisorganizedFilesIndexDocument {
 	private String indexing_errorDescription;
 
 	// ========== CONTROL DE REORGANIZACIÓN ==========
-	private String reorg_status; // PENDING | PROCESSING | SUCCESS | FAILED | SKIPPED
+	private String reorg_status; // PENDING | COMPLETED | FAILED | SKIPPED
 	private String reorg_destinationPath;
 	private Instant reorg_completedAt;
 	private Long reorg_jobExecutionId;
